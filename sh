@@ -1,5 +1,12 @@
 #!/bin/ash
 
+get_vars(){
+	local IFS="$1"
+	shift
+	read $@
+}
+
+
 nth(){ #prints the nth($2) token in string($1) separated by delimiter($3)
 	[ $# -eq 3 ] || return 1
 	local String="$1" i="$2" IFS="$3"
@@ -72,6 +79,28 @@ LANG=es parse_desktop "$desktopFile"
 echo "$Name|$GenericName|$Comment|$Exec|$Icon|$Terminal|$TryExec|$Type|$MimeType|$Categories|$Actions"
 break #only test 1 file
 done
+
+for packageFile in $HOME/.packages/Packages-*; do
+	while get_vars "|" pkgname nameonly version pkgrelease category size path fullfilename dependencies description compileddistro compiledrelease repo; do
+		echo "
+		$pkgname
+		$nameonly
+		$version
+		$pkgrelease
+		$category
+		$size
+		$path
+		$fullfilename
+		$dependencies
+		$description
+		$compileddistro
+		$compiledrelease
+		$repo"
+	break #we just need to test 1 line
+	done < "$packageFile"
+	break #we just need to test 1 file
+done
+
 }
 
 $@
