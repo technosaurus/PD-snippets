@@ -1,11 +1,22 @@
 #!/bin/ash
 
+getinput(){ #$1 can be character to print in place of characters for passwords
+	local RET='' IFS="" #get spaces and tabs
+	while read -n 1 A; do
+		case "$A" in
+		$'\033')return 255;;
+		"")printf "$RET";break;;
+		$'\177')printf "\b\b\b   \b\b\b" >/dev/stderr;RET="${RET%?}";;
+		*)printf "\b${1:-$A}" >/dev/stderr;RET="$RET$A";;
+		esac
+	done
+}
+
 get_vars(){
 	local IFS="$1"
 	shift
 	read $@
 }
-
 
 nth(){ #prints the nth($2) token in string($1) separated by delimiter($3)
 	[ $# -eq 3 ] || return 1
