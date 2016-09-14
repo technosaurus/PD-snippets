@@ -1,186 +1,299 @@
 //https://www.w3.org/TR/CSS2/propidx.html
-#define CSS_PROP_MAP { \
-	_MAP(_MOZ_BINDING,          "-moz-binding"), \
-	_MAP(_MOZ_BORDER_RADIUS,    "-moz-border-radius"), \
-	_MAP(_MOZ_BORDER_RADIUS_BOTTOMLEFT,"-moz-border-radius-bottomleft"), \
-	_MAP(_MOZ_BORDER_RADIUS_BOTTOMRIGHT,"-moz-border-radius-bottomright"), \
-	_MAP(_MOZ_BORDER_RADIUS_TOPLEFT,"-moz-border-radius-topleft"), \
-	_MAP(_MOZ_BORDER_RADIUS_TOPRIGHT,"-moz-border-radius-topright"), \
-	_MAP(_MOZ_BORDER_BOTTOM_COLORS,"-moz-border-bottom-colors"), \
-	_MAP(_MOZ_BORDER_LEFT_COLORS,"-moz-border-left-colors"), \
-	_MAP(_MOZ_BORDER_RIGHT_COLORS,"-moz-border-right-colors"), \
-	_MAP(_MOZ_BORDER_TOP_COLORS,"-moz-border-top-colors"), \
-	_MAP(_MOZ_OPACITY,          "-moz-opacity"), \
-	_MAP(_MOZ_OUTLINE,          "-moz-outline"), \
-	_MAP(_MOZ_OUTLINE_COLOR,    "-moz-outline-color"), \
-	_MAP(_MOZ_OUTLINE_STYLE,    "-moz-outline-style"), \
-	_MAP(_MOZ_OUTLINE_WIDTH,    "-moz-outline-width"), \
-	_MAP(_MOZ_USER_FOCUS,       "-moz-user-focus"), \
-	_MAP(_MOZ_USER_INPUT,       "-moz-user-input"), \
-	_MAP(_MOZ_USER_MODIFY,      "-moz-user-modify"), \
-	_MAP(_MOZ_USER_SELECT,      "-moz-user-select"), \
-	_MAP(_O_REPLACE,            "-o-replace"), \
-	_MAP(_O_SET_LINK_SOURCE,    "-o-set-link-source"), \
-	_MAP(_O_USE_LINK_SOURCE,    "-o-use-link-source"), \
-	_MAP(ACCELERATOR,           "accelerator"), \
-	_MAP(AZIMUTH,               "azimuth"), \
-	_MAP(BACKGROUND,            "background"), \
-	_MAP(BACKGROUND_ATTACHMENT, "background-attachment"), \
-	_MAP(BACKGROUND_COLOR,      "background-color"), \
-	_MAP(BACKGROUND_IMAGE,      "background-image"), \
-	_MAP(BACKGROUND_POSITION,   "background-position"), \
-	_MAP(BACKGROUND_POSITION_X, "background-position-x"), \
-	_MAP(BACKGROUND_POSITION_Y, "background-position-y"), \
-	_MAP(BACKGROUND_REPEAT,     "background-repeat"), \
-	_MAP(BORDER,                "border"), \
-	_MAP(BORDER_BOTTOM,         "border-bottom"), \
-	_MAP(BORDER_BOTTOM_COLOR,   "border-bottom-color"), \
-	_MAP(BORDER_BOTTOM_STYLE,   "border-bottom-style"), \
-	_MAP(BORDER_BOTTOM_WIDTH,   "border-bottom-width"), \
-	_MAP(BORDER_COLLAPSE,       "border-collapse"), \
-	_MAP(BORDER_COLOR,          "border-color"), \
-	_MAP(BORDER_LEFT,           "border-left"), \
-	_MAP(BORDER_LEFT_COLOR,     "border-left-color"), \
-	_MAP(BORDER_LEFT_STYLE,     "border-left-style"), \
-	_MAP(BORDER_LEFT_WIDTH,     "border-left-width"), \
-	_MAP(BORDER_RIGHT,          "border-right"), \
-	_MAP(BORDER_RIGHT_COLOR,    "border-right-color"), \
-	_MAP(BORDER_RIGHT_STYLE,    "border-right-style"), \
-	_MAP(BORDER_RIGHT_WIDTH,    "border-right-width"), \
-	_MAP(BORDER_SPACING,        "border-spacing"), \
-	_MAP(BORDER_STYLE,          "border-style"), \
-	_MAP(BORDER_TOP,            "border-top"), \
-	_MAP(BORDER_TOP_COLOR,      "border-top-color"), \
-	_MAP(BORDER_TOP_STYLE,      "border-top-style"), \
-	_MAP(BORDER_TOP_WIDTH,      "border-top-width"), \
-	_MAP(BORDER_WIDTH,          "border-width"), \
-	_MAP(BOTTOM,                "bottom"), \
-	_MAP(CAPTION_SIDE,          "caption-side"), \
-	_MAP(CLEAR,                 "clear"), \
-	_MAP(CLIP,                  "clip"), \
-	_MAP(COLOR,                 "color"), \
-	_MAP(CONTENT,               "content"), \
-	_MAP(COUNTER_INCREMENT,     "counter-increment"), \
-	_MAP(COUNTER_RESET,         "counter-reset"), \
-	_MAP(CUE,                   "cue"), \
-	_MAP(CUE_AFTER,             "cue-after"), \
-	_MAP(CUE_BEFORE,            "cue-before"), \
-	_MAP(CURSOR,                "cursor"), \
-	_MAP(DIRECTION,             "direction"), \
-	_MAP(DISPLAY,               "display"), \
-	_MAP(ELEVATION,             "elevation"), \
-	_MAP(EMPTY_CELLS,           "empty-cells"), \
-	_MAP(FILTER,                "filter"), \
-	_MAP(FLOAT,                 "float"), \
-	_MAP(FONT,                  "font"), \
-	_MAP(FONT_FAMILY,           "font-family"), \
-	_MAP(FONT_SIZE,             "font-size"), \
-	_MAP(FONT_SIZE_ADJUST,      "font-size-adjust"), \
-	_MAP(FONT_STRETCH,          "font-stretch"), \
-	_MAP(FONT_STYLE,            "font-style"), \
-	_MAP(FONT_VARIANT,          "font-variant"), \
-	_MAP(FONT_WEIGHT,           "font-weight"), \
-	_MAP(HEIGHT,                "height"), \
-	_MAP(IME_MODE,              "ime-mode"), \
-	_MAP(INCLUDE_SOURCE,        "include-source"), \
-	_MAP(LAYER_BACKGROUND_COLOR,"layer-background-color"), \
-	_MAP(LAYER_BACKGROUND_IMAGE,"layer-background-image"), \
-	_MAP(LAYOUT_FLOW,           "layout-flow"), \
-	_MAP(LAYOUT_GRID,           "layout-grid"), \
-	_MAP(LAYOUT_GRID_CHAR,      "layout-grid-char"), \
-	_MAP(LAYOUT_GRID_CHAR_SPACING,"layout-grid-char-spacing"), \
-	_MAP(LAYOUT_GRID_LINE,      "layout-grid-line"), \
-	_MAP(LAYOUT_GRID_MODE,      "layout-grid-mode"), \
-	_MAP(LAYOUT_GRID_TYPE,      "layout-grid-type"), \
-	_MAP(LEFT,                  "left"), \
-	_MAP(LETTER_SPACING,        "letter-spacing"), \
-	_MAP(LINE_BREAK,            "line-break"), \
-	_MAP(LINE_HEIGHT,           "line-height"), \
-	_MAP(LIST_STYLE,            "list-style"), \
-	_MAP(LIST_STYLE_IMAGE,      "list-style-image"), \
-	_MAP(LIST_STYLE_POSITION,   "list-style-position"), \
-	_MAP(LIST_STYLE_TYPE,       "list-style-type"), \
-	_MAP(MARGIN,                "margin"), \
-	_MAP(MARGIN_BOTTOM,         "margin-bottom"), \
-	_MAP(MARGIN_LEFT,           "margin-left"), \
-	_MAP(MARGIN_RIGHT,          "margin-right"), \
-	_MAP(MARGIN_TOP,            "margin-top"), \
-	_MAP(MARKER_OFFSET,         "marker-offset"), \
-	_MAP(MARKS,                 "marks"), \
-	_MAP(MAX_HEIGHT,            "max-height"), \
-	_MAP(MAX_WIDTH,             "max-width"), \
-	_MAP(MIN_HEIGHT,            "min-height"), \
-	_MAP(MIN_WIDTH,             "min-width"), \
-	_MAP(ORPHANS,               "orphans"), \
-	_MAP(OUTLINE,               "outline"), \
-	_MAP(OUTLINE_COLOR,         "outline-color"), \
-	_MAP(OUTLINE_STYLE,         "outline-style"), \
-	_MAP(OUTLINE_WIDTH,         "outline-width"), \
-	_MAP(OVERFLOW,              "overflow"), \
-	_MAP(OVERFLOW_X,            "overflow-x"), \
-	_MAP(OVERFLOW_X,            "overflow-y"), \
-	_MAP(PADDING,               "padding"), \
-	_MAP(PADDING_BOTTOM,        "padding-bottom"), \
-	_MAP(PADDING_LEFT,          "padding-left"), \
-	_MAP(PADDING_RIGHT,         "padding-right"), \
-	_MAP(PADDING_TOP,           "padding-top"), \
-	_MAP(PAGE,                  "page"), \
-	_MAP(PAGE_BREAK_AFTER,      "page-break-after"), \
-	_MAP(PAGE_BREAK_BEFORE,     "page-break-before"), \
-	_MAP(PAGE_BREAK_INSIDE,     "page-break-inside"), \
-	_MAP(PAUSE,                 "pause"), \
-	_MAP(PAUSE_AFTER,           "pause-after"), \
-	_MAP(PAUSE_BEFORE,          "pause-before"), \
-	_MAP(PITCH,                 "pitch"), \
-	_MAP(PITCH_RANGE,           "pitch-range"), \
-	_MAP(PLAY_DURING,           "play-during"), \
-	_MAP(POSITION,              "position"), \
-	_MAP(QUOTES,                "quotes"), \
-	_MAP(RICHNESS,              "richness"), \
-	_MAP(RIGHT,                 "right"), \
-	_MAP(RUBY_ALIGN,            "ruby-align"), \
-	_MAP(RUBY_OVERHANG,         "ruby-overhang"), \
-	_MAP(RUBY_POSITION,         "ruby-position"), \
-	_MAP(SCROLLBAR_ARROW_COLOR, "scrollbar-arrow-color"), \
-	_MAP(SCROLLBAR_BASE_COLOR,  "scrollbar-base-color"), \
-	_MAP(SCROLLBAR_DARK_SHADOW_COLOR,"scrollbar-dark-shadow-color"), \
-	_MAP(SCROLLBAR_FACE_COLOR,  "scrollbar-face-color"), \
-	_MAP(SCROLLBAR_HIGHLIGHT_COLOR,"scrollbar-highlight-color"), \
-	_MAP(SCROLLBAR_SHADOW_COLOR,"scrollbar-shadow-color"), \
-	_MAP(SCROLLBAR_3D_LIGHT_COLOR,"scrollbar-3d-light-color"), \
-	_MAP(SCROLLBAR_TRACK_COLOR, "scrollbar-track-color"), \
-	_MAP(SIZE,                  "size"), \
-	_MAP(SPEAK,                 "speak"), \
-	_MAP(SPEAK_HEADER,          "speak-header"), \
-	_MAP(SPEAK_NUMERAL,         "speak-numeral"), \
-	_MAP(SPEAK_PUNCTUATION,     "speak-punctuation"), \
-	_MAP(SPEECH_RATE,           "speech-rate"), \
-	_MAP(STRESS,                "stress"), \
-	_MAP(TABLE_LAYOUT,          "table-layout"), \
-	_MAP(TEXT_ALIGN,            "text-align"), \
-	_MAP(TEXT_ALIGN_LAST,       "text-align-last"), \
-	_MAP(TEXT_AUTOSPACE,        "text-autospace"), \
-	_MAP(TEXT_DECORATION,       "text-decoration"), \
-	_MAP(TEXT_INDENT,           "text-indent"), \
-	_MAP(TEXT_JUSTIFY           "text-justify"), \
-	_MAP(TEXT_KASHIDA_SPACE,    "text-kashida-space"), \
-	_MAP(TEXT_OVERFLOW,         "text-overflow"), \
-	_MAP(TEXT_SHADOW,           "text-shadow"), \
-	_MAP(TEXT_TRANSFORM,        "text-transform"), \
-	_MAP(TEXT_UNDERLINE_POSITION,"text-underline-position"), \
-	_MAP(TOP,                   "top"), \
-	_MAP(UNICODE_BIDI,          "unicode-bidi"), \
-	_MAP(VERTICAL_ALIGN,        "vertical-align"), \
-	_MAP(VISIBILITY,            "visibility"), \
-	_MAP(VOICE_FAMILY,          "voice-family"), \
-	_MAP(VOLUME,                "volume"), \
-	_MAP(WHITE_SPACE,           "white-space"), \
-	_MAP(WIDOWS,                "widows"), \
-	_MAP(WIDTH,                 "width"), \
-	_MAP(WORD_BREAK,            "word-break"), \
-	_MAP(WORD_SPACING,          "word-spacing"), \
-	_MAP(WORD_WRAP,             "word-wrap"), \
-	_MAP(WRITING_MODE,          "writing-mode"), \
-	_MAP(Z_INDEX,               "z-index"),\
-	_MAP(ZOOM,                  "zoom"),\
-}
+#define CSS_PROP_MAP(OP, ...) \
+	OP(_MOZ_BINDING,              "-moz-binding") __VA_ARGS__ \
+	OP(_MOZ_BORDER_RADIUS,        "-moz-border-radius") __VA_ARGS__ \
+	OP(_MOZ_BORDER_RADIUS_BOTTOMLEFT,"-moz-border-radius-bottomleft") __VA_ARGS__ \
+	OP(_MOZ_BORDER_RADIUS_BOTTOMRIGHT,"-moz-border-radius-bottomright") __VA_ARGS__ \
+	OP(_MOZ_BORDER_RADIUS_TOPLEFT,"-moz-border-radius-topleft") __VA_ARGS__ \
+	OP(_MOZ_BORDER_RADIUS_TOPRIGHT,"-moz-border-radius-topright") __VA_ARGS__ \
+	OP(_MOZ_BORDER_BOTTOM_COLORS, "-moz-border-bottom-colors") __VA_ARGS__ \
+	OP(_MOZ_BORDER_LEFT_COLORS,   "-moz-border-left-colors") __VA_ARGS__ \
+	OP(_MOZ_BORDER_RIGHT_COLORS,  "-moz-border-right-colors") __VA_ARGS__ \
+	OP(_MOZ_BORDER_TOP_COLORS,    "-moz-border-top-colors") __VA_ARGS__ \
+	OP(_MOZ_OPACITY,              "-moz-opacity") __VA_ARGS__ \
+	OP(_MOZ_OUTLINE,              "-moz-outline") __VA_ARGS__ \
+	OP(_MOZ_OUTLINE_COLOR,        "-moz-outline-color") __VA_ARGS__ \
+	OP(_MOZ_OUTLINE_STYLE,        "-moz-outline-style") __VA_ARGS__ \
+	OP(_MOZ_OUTLINE_WIDTH,        "-moz-outline-width") __VA_ARGS__ \
+	OP(_MOZ_USER_FOCUS,           "-moz-user-focus") __VA_ARGS__ \
+	OP(_MOZ_USER_INPUT,           "-moz-user-input") __VA_ARGS__ \
+	OP(_MOZ_USER_MODIFY,          "-moz-user-modify") __VA_ARGS__ \
+	OP(_MOZ_USER_SELECT,          "-moz-user-select") __VA_ARGS__ \
+	OP(_O_REPLACE,                "-o-replace") __VA_ARGS__ \
+	OP(_O_SET_LINK_SOURCE,        "-o-set-link-source") __VA_ARGS__ \
+	OP(_O_USE_LINK_SOURCE,        "-o-use-link-source") __VA_ARGS__ \
+	OP(ACCELERATOR,               "accelerator") __VA_ARGS__ \
+	OP(ALIGN_CONTENT,             "align-content") __VA_ARGS__ \
+	OP(ALIGN_ITEMS,               "align-items") __VA_ARGS__ \
+	OP(ALIGN_SELF,                "align-self") __VA_ARGS__ \
+	OP(ANIMATION,                 "animation") __VA_ARGS__ \
+	OP(ANIMATION_DELAY,           "animation-delay") __VA_ARGS__ \
+	OP(ANIMATION_DIRECTION,       "animation-direction") __VA_ARGS__ \
+	OP(ANIMATION_DURATION,        "animation-duration") __VA_ARGS__ \
+	OP(ANIMATION_FILL_MODE,       "animation-fill-mode") __VA_ARGS__ \
+	OP(ANIMATION_ITERATION_COUNT, "animation-iteration-count") __VA_ARGS__ \
+	OP(ANIMATION_NAME,            "animation-name") __VA_ARGS__ \
+	OP(ANIMATION_PLAY_STATE,      "animation-play-state") __VA_ARGS__ \
+	OP(ANIMATION_TIMING_FUNCTION, "animation-timing-function") __VA_ARGS__ \
+	OP(AZIMUTH,                   "azimuth") __VA_ARGS__ \
+	OP(BACKFACE_VISIBILITY,       "backface-visibility") __VA_ARGS__ \
+	OP(BACKGROUND,                "background") __VA_ARGS__ \
+	OP(BACKGROUND_ATTACHMENT,     "background-attachment") __VA_ARGS__ \
+	OP(BACKGROUND_BLEND_MODE,     "background-blend-mode") __VA_ARGS__ \
+	OP(BACKGROUND_CLIP,           "background-clip") __VA_ARGS__ \
+	OP(BACKGROUND_COLOR,          "background-color") __VA_ARGS__ \
+	OP(BACKGROUND_IMAGE,          "background-image") __VA_ARGS__ \
+	OP(BACKGROUND_ORIGIN,         "background-origin") __VA_ARGS__ \
+	OP(BACKGROUND_POSITION,       "background-position") __VA_ARGS__ \
+	OP(BACKGROUND_POSITION_X,     "background-position-x") __VA_ARGS__ \
+	OP(BACKGROUND_POSITION_Y,     "background-position-y") __VA_ARGS__ \
+	OP(BACKGROUND_REPEAT,         "background-repeat") __VA_ARGS__ \
+	OP(BACKGROUND_SIZE,           "background-size") __VA_ARGS__ \
+	OP(BORDER,                    "border") __VA_ARGS__ \
+	OP(BORDER_BOTTOM,             "border-bottom") __VA_ARGS__ \
+	OP(BORDER_BOTTOM_COLOR,       "border-bottom-color") __VA_ARGS__ \
+	OP(BORDER_BOTTOM_LEFT_RADIUS,"border-bottom-left-radius") __VA_ARGS__ \
+	OP(BORDER_BOTTOM_RIGHT_RADIUS,"border-bottom-right-radius") __VA_ARGS__ \
+	OP(BORDER_BOTTOM_STYLE,       "border-bottom-style") __VA_ARGS__ \
+	OP(BORDER_BOTTOM_WIDTH,       "border-bottom-width") __VA_ARGS__ \
+	OP(BORDER_COLLAPSE,           "border-collapse") __VA_ARGS__ \
+	OP(BORDER_COLOR,              "border-color") __VA_ARGS__ \
+	OP(BORDER_IMAGE,              "border-image") __VA_ARGS__ \
+	OP(BORDER_IMAGE_OUTSET,       "border-image-outset") __VA_ARGS__ \
+	OP(BORDER_IMAGE_REPEAT,       "border-image-repeat") __VA_ARGS__ \
+	OP(BORDER_IMAGE_SLICE,        "border-image-slice") __VA_ARGS__ \
+	OP(BORDER_IMAGE_SOURCE,       "border-image-source") __VA_ARGS__ \
+	OP(BORDER_IMAGE_WIDTH,        "border-image-width") __VA_ARGS__ \
+	OP(BORDER_LEFT,               "border-left") __VA_ARGS__ \
+	OP(BORDER_LEFT_COLOR,         "border-left-color") __VA_ARGS__ \
+	OP(BORDER_LEFT_STYLE,         "border-left-style") __VA_ARGS__ \
+	OP(BORDER_LEFT_WIDTH,         "border-left-width") __VA_ARGS__ \
+	OP(BORDER_RADIUS,             "border-radius") __VA_ARGS__ \
+	OP(BORDER_RIGHT,              "border-right") __VA_ARGS__ \
+	OP(BORDER_RIGHT_COLOR,        "border-right-color") __VA_ARGS__ \
+	OP(BORDER_RIGHT_STYLE,        "border-right-style") __VA_ARGS__ \
+	OP(BORDER_RIGHT_WIDTH,        "border-right-width") __VA_ARGS__ \
+	OP(BORDER_SPACING,            "border-spacing") __VA_ARGS__ \
+	OP(BORDER_STYLE,              "border-style") __VA_ARGS__ \
+	OP(BORDER_TOP,                "border-top") __VA_ARGS__ \
+	OP(BORDER_TOP_COLOR,          "border-top-color") __VA_ARGS__ \
+	OP(BORDER_TOP_LEFT_RADIUS,    "border-top-left-radius") __VA_ARGS__ \
+	OP(BORDER_TOP_RIGHT_RADIUS,   "border-top-right-radius") __VA_ARGS__ \
+	OP(BORDER_TOP_STYLE,          "border-top-style") __VA_ARGS__ \
+	OP(BORDER_TOP_WIDTH,          "border-top-width") __VA_ARGS__ \
+	OP(BORDER_WIDTH,              "border-width") __VA_ARGS__ \
+	OP(BOTTOM,                    "bottom") __VA_ARGS__ \
+	OP(BOX_DECORATION_BREAK,      "box-decoration-break") __VA_ARGS__ \
+	OP(BOX_SHADOW,                "box-shadow") __VA_ARGS__ \
+	OP(BOX_SIZING,                "box-sizing") __VA_ARGS__ \
+	OP(BREAK_AFTER,               "break-after") __VA_ARGS__ \
+	OP(BREAK_BEFORE,              "break-before") __VA_ARGS__ \
+	OP(BREAK_INSIDE,              "break-inside") __VA_ARGS__ \
+	OP(CAPTION_SIDE,              "caption-side") __VA_ARGS__ \
+	OP(CLEAR,                     "clear") __VA_ARGS__ \
+	OP(CLIP,                      "clip") __VA_ARGS__ \
+	OP(COLOR,                     "color") __VA_ARGS__ \
+	OP(COLUMN_COUNT,              "column-count") __VA_ARGS__ \
+	OP(COLUMN_FILL,               "column-fill") __VA_ARGS__ \
+	OP(COLUMN_GAP,                "column-gap") __VA_ARGS__ \
+	OP(COLUMN_RULE,               "column-rule") __VA_ARGS__ \
+	OP(COLUMN_RULE_COLOR,         "column-rule-color") __VA_ARGS__ \
+	OP(COLUMN_RULE_STYLE,         "column-rule-style") __VA_ARGS__ \
+	OP(COLUMN_RULE_WIDTH,         "column-rule-width") __VA_ARGS__ \
+	OP(COLUMN_SPAN,               "column-span") __VA_ARGS__ \
+	OP(COLUMN_WIDTH,              "column-width") __VA_ARGS__ \
+	OP(COLUMNS,                   "columns") __VA_ARGS__ \
+	OP(CONTENT,                   "content") __VA_ARGS__ \
+	OP(COUNTER_INCREMENT,         "counter-increment") __VA_ARGS__ \
+	OP(COUNTER_RESET,             "counter-reset") __VA_ARGS__ \
+	OP(CUE,                       "cue") __VA_ARGS__ \
+	OP(CUE_AFTER,                 "cue-after") __VA_ARGS__ \
+	OP(CUE_BEFORE,                "cue-before") __VA_ARGS__ \
+	OP(CURSOR,                    "cursor") __VA_ARGS__ \
+	OP(DIRECTION,                 "direction") __VA_ARGS__ \
+	OP(DISPLAY,                   "display") __VA_ARGS__ \
+	OP(ELEVATION,                 "elevation") __VA_ARGS__ \
+	OP(EMPTY_CELLS,               "empty-cells") __VA_ARGS__ \
+	OP(FILTER,                    "filter") __VA_ARGS__ \
+	OP(FLEX,                      "flex") __VA_ARGS__ \
+	OP(FLEX_BASIS,                "flex-basis") __VA_ARGS__ \
+	OP(FLEX_DIRECTION,            "flex-direction") __VA_ARGS__ \
+	OP(FLEX_FLOW,                 "flex-flow") __VA_ARGS__ \
+	OP(FLEX_GROW,                 "flex-grow") __VA_ARGS__ \
+	OP(FLEX_SHRINK,               "flex-shrink") __VA_ARGS__ \
+	OP(FLEX_WRAP,                 "flex-wrap") __VA_ARGS__ \
+	OP(FLOAT,                     "float") __VA_ARGS__ \
+	OP(FONT,                      "font") __VA_ARGS__ \
+	OP(FONT_FAMILY,               "font-family") __VA_ARGS__ \
+	OP(FONT_FEATURE_SETTINGS,     "font-feature-settings") __VA_ARGS__ \
+	OP(FONT_KERNING,              "font-kerning") __VA_ARGS__ \
+	OP(FONT_LANGUAGE_OVERRIDE,    "font-language-override") __VA_ARGS__ \
+	OP(FONT_SIZE,                 "font-size") __VA_ARGS__ \
+	OP(FONT_SIZE_ADJUST,          "font-size-adjust") __VA_ARGS__ \
+	OP(FONT_STRETCH,              "font-stretch") __VA_ARGS__ \
+	OP(FONT_STYLE,                "font-style") __VA_ARGS__ \
+	OP(FONT_SYNTHESIS,            "font-synthesis") __VA_ARGS__ \
+	OP(FONT_VARIANT,              "font-variant") __VA_ARGS__ \
+	OP(FONT_VARIANT_ALTERNATES,   "font-variant-alternates") __VA_ARGS__ \
+	OP(FONT_VARIANT_CAPS,         "font-variant-caps") __VA_ARGS__ \
+	OP(FONT_VARIANT_EAST_ASIAN,   "font-variant-east-asian") __VA_ARGS__ \
+	OP(FONT_VARIANT_LIGATURES,    "font-variant-ligatures") __VA_ARGS__ \
+	OP(FONT_VARIANT_NUMERIC,      "font-variant-numeric") __VA_ARGS__ \
+	OP(FONT_VARIANT_POSITION,     "font-variant-position") __VA_ARGS__ \
+	OP(FONT_WEIGHT,               "font-weight") __VA_ARGS__ \
+	OP(HANGING_PUNCTUATION,       "hanging-punctuation") __VA_ARGS__ \
+	OP(HEIGHT,                    "height") __VA_ARGS__ \
+	OP(HYPHENS,                   "hyphens") __VA_ARGS__ \
+	OP(IMAGE_ORIENTATION,         "image-orientation") __VA_ARGS__ \
+	OP(IMAGE_RENDERING,           "image-rendering") __VA_ARGS__ \
+	OP(IMAGE_RESOLUTION,          "image-resolution") __VA_ARGS__ \
+	OP(IME_MODE,                  "ime-mode") __VA_ARGS__ \
+	OP(INCLUDE_SOURCE,            "include-source") __VA_ARGS__ \
+	OP(JUSTIFY_CONTENT,           "justify-content") __VA_ARGS__ \
+	OP(LAYER_BACKGROUND_COLOR,"layer-background-color") __VA_ARGS__ \
+	OP(LAYER_BACKGROUND_IMAGE,"layer-background-image") __VA_ARGS__ \
+	OP(LAYOUT_FLOW,               "layout-flow") __VA_ARGS__ \
+	OP(LAYOUT_GRID,               "layout-grid") __VA_ARGS__ \
+	OP(LAYOUT_GRID_CHAR,          "layout-grid-char") __VA_ARGS__ \
+	OP(LAYOUT_GRID_CHAR_SPACING,"layout-grid-char-spacing") __VA_ARGS__ \
+	OP(LAYOUT_GRID_LINE,          "layout-grid-line") __VA_ARGS__ \
+	OP(LAYOUT_GRID_MODE,          "layout-grid-mode") __VA_ARGS__ \
+	OP(LAYOUT_GRID_TYPE,          "layout-grid-type") __VA_ARGS__ \
+	OP(LEFT,                      "left") __VA_ARGS__ \
+	OP(LETTER_SPACING,            "letter-spacing") __VA_ARGS__ \
+	OP(LINE_BREAK,                "line-break") __VA_ARGS__ \
+	OP(LINE_HEIGHT,               "line-height") __VA_ARGS__ \
+	OP(LIST_STYLE,                "list-style") __VA_ARGS__ \
+	OP(LIST_STYLE_IMAGE,          "list-style-image") __VA_ARGS__ \
+	OP(LIST_STYLE_POSITION,       "list-style-position") __VA_ARGS__ \
+	OP(LIST_STYLE_TYPE,           "list-style-type") __VA_ARGS__ \
+	OP(MARGIN,                    "margin") __VA_ARGS__ \
+	OP(MARGIN_BOTTOM,             "margin-bottom") __VA_ARGS__ \
+	OP(MARGIN_LEFT,               "margin-left") __VA_ARGS__ \
+	OP(MARGIN_RIGHT,              "margin-right") __VA_ARGS__ \
+	OP(MARGIN_TOP,                "margin-top") __VA_ARGS__ \
+	OP(MARKER_OFFSET,             "marker-offset") __VA_ARGS__ \
+	OP(MARKS,                     "marks") __VA_ARGS__ \
+	OP(MARK_AFTER,                "mark-after") __VA_ARGS__ \
+	OP(MARK_BEFORE,               "mark-before") __VA_ARGS__ \
+	OP(MARQUE_DIRECTION,          "marque-direction") __VA_ARGS__ \
+	OP(MARQUE_PLAY_COUNT,         "marque-play-count") __VA_ARGS__ \
+	OP(MARQUE_SPEED,              "marque-speed") __VA_ARGS__ \
+	OP(MARQUE_STYLE,              "marque-style") __VA_ARGS__ \
+	OP(MASK_TYPE,                 "mask-type") __VA_ARGS__ \
+	OP(MAX_HEIGHT,                "max-height") __VA_ARGS__ \
+	OP(MAX_WIDTH,                 "max-width") __VA_ARGS__ \
+	OP(MIN_HEIGHT,                "min-height") __VA_ARGS__ \
+	OP(MIN_WIDTH,                 "min-width") __VA_ARGS__ \
+	OP(NAV_DOWN,                  "nav-down") __VA_ARGS__ \
+	OP(NAV_INDEX,                 "nav-index") __VA_ARGS__ \
+	OP(NAV_LEFT,                  "nav-left") __VA_ARGS__ \
+	OP(NAV_RIGHT,                 "nav-right") __VA_ARGS__ \
+	OP(NAV_UP,                    "nav-up") __VA_ARGS__ \
+	OP(OBJECT_FIT,                "object-fit") __VA_ARGS__ \
+	OP(OBJECT_POSITION,           "object-position") __VA_ARGS__ \
+	OP(OPACITY,                   "opacity") __VA_ARGS__ \
+	OP(ORPHANS,                   "orphans") __VA_ARGS__ \
+	OP(ORDER,                     "order") __VA_ARGS__ \
+	OP(OUTLINE,                   "outline") __VA_ARGS__ \
+	OP(OUTLINE_COLOR,             "outline-color") __VA_ARGS__ \
+	OP(OUTLINE_OFFSET,            "outline-offset") __VA_ARGS__ \
+	OP(OUTLINE_STYLE,             "outline-style") __VA_ARGS__ \
+	OP(OUTLINE_WIDTH,             "outline-width") __VA_ARGS__ \
+	OP(OVERFLOW,                  "overflow") __VA_ARGS__ \
+	OP(OVERFLOW_WRAP,             "overflow-wrap") __VA_ARGS__ \
+	OP(OVERFLOW_X,                "overflow-x") __VA_ARGS__ \
+	OP(OVERFLOW_Y,                "overflow-y") __VA_ARGS__ \
+	OP(PADDING,                   "padding") __VA_ARGS__ \
+	OP(PADDING_BOTTOM,            "padding-bottom") __VA_ARGS__ \
+	OP(PADDING_LEFT,              "padding-left") __VA_ARGS__ \
+	OP(PADDING_RIGHT,             "padding-right") __VA_ARGS__ \
+	OP(PADDING_TOP,               "padding-top") __VA_ARGS__ \
+	OP(PAGE,                      "page") __VA_ARGS__ \
+	OP(PAGE_BREAK_AFTER,          "page-break-after") __VA_ARGS__ \
+	OP(PAGE_BREAK_BEFORE,         "page-break-before") __VA_ARGS__ \
+	OP(PAGE_BREAK_INSIDE,         "page-break-inside") __VA_ARGS__ \
+	OP(PAUSE,                     "pause") __VA_ARGS__ \
+	OP(PAUSE_AFTER,               "pause-after") __VA_ARGS__ \
+	OP(PAUSE_BEFORE,              "pause-before") __VA_ARGS__ \
+	OP(PERSPECTIVE,               "perspective") __VA_ARGS__ \
+	OP(PERSPECTIVE_ORIGIN,        "perspective-origin") __VA_ARGS__ \
+	OP(PHONEMES,                  "phonemes") __VA_ARGS__ \
+	OP(PITCH,                     "pitch") __VA_ARGS__ \
+	OP(PITCH_RANGE,               "pitch-range") __VA_ARGS__ \
+	OP(PLAY_DURING,               "play-during") __VA_ARGS__ \
+	OP(POSITION,                  "position") __VA_ARGS__ \
+	OP(QUOTES,                    "quotes") __VA_ARGS__ \
+	OP(RESIZE,                    "resize") __VA_ARGS__ \
+	OP(REST,                      "rest") __VA_ARGS__ \
+	OP(REST_AFTER,                "rest-after") __VA_ARGS__ \
+	OP(REST_BEFORE,               "rest-before") __VA_ARGS__ \
+	OP(RICHNESS,                  "richness") __VA_ARGS__ \
+	OP(RIGHT,                     "right") __VA_ARGS__ \
+	OP(RUBY_ALIGN,                "ruby-align") __VA_ARGS__ \
+	OP(RUBY_OVERHANG,             "ruby-overhang") __VA_ARGS__ \
+	OP(RUBY_POSITION,             "ruby-position") __VA_ARGS__ \
+	OP(SCROLLBAR_ARROW_COLOR,     "scrollbar-arrow-color") __VA_ARGS__ \
+	OP(SCROLLBAR_BASE_COLOR,      "scrollbar-base-color") __VA_ARGS__ \
+	OP(SCROLLBAR_DARK_SHADOW_COLOR,"scrollbar-dark-shadow-color") __VA_ARGS__ \
+	OP(SCROLLBAR_FACE_COLOR,      "scrollbar-face-color") __VA_ARGS__ \
+	OP(SCROLLBAR_HIGHLIGHT_COLOR, "scrollbar-highlight-color") __VA_ARGS__ \
+	OP(SCROLLBAR_SHADOW_COLOR,    "scrollbar-shadow-color") __VA_ARGS__ \
+	OP(SCROLLBAR_3D_LIGHT_COLOR,  "scrollbar-3d-light-color") __VA_ARGS__ \
+	OP(SCROLLBAR_TRACK_COLOR,     "scrollbar-track-color") __VA_ARGS__ \
+	OP(SIZE,                      "size") __VA_ARGS__ \
+	OP(SPEAK,                     "speak") __VA_ARGS__ \
+	OP(SPEAK_HEADER,              "speak-header") __VA_ARGS__ \
+	OP(SPEAK_NUMERAL,             "speak-numeral") __VA_ARGS__ \
+	OP(SPEAK_PUNCTUATION,         "speak-punctuation") __VA_ARGS__ \
+	OP(SPEECH_RATE,               "speech-rate") __VA_ARGS__ \
+	OP(SRC,                       "src") __VA_ARGS__ \
+	OP(STRESS,                    "stress") __VA_ARGS__ \
+	OP(TAB_SIZE,                  "tab-size") __VA_ARGS__ \
+	OP(TABLE_LAYOUT,              "table-layout") __VA_ARGS__ \
+	OP(TEXT_ALIGN,                "text-align") __VA_ARGS__ \
+	OP(TEXT_ALIGN_LAST,           "text-align-last") __VA_ARGS__ \
+	OP(TEXT_AUTOSPACE,            "text-autospace") __VA_ARGS__ \
+	OP(TEXT_COMBINE_UPRIGHT,      "text-combine-upright") __VA_ARGS__ \
+	OP(TEXT_DECORATION,           "text-decoration") __VA_ARGS__ \
+	OP(TEXT_DECORATION_COLOR,     "text-decoration-color") __VA_ARGS__ \
+	OP(TEXT_DECORATION_LINE,      "text-decoration-line") __VA_ARGS__ \
+	OP(TEXT_DECORATION_STYLE,     "text-decoration-style") __VA_ARGS__ \
+	OP(TEXT_INDENT,               "text-indent") __VA_ARGS__ \
+	OP(TEXT_JUSTIFY               "text-justify") __VA_ARGS__ \
+	OP(TEXT_KASHIDA_SPACE,        "text-kashida-space") __VA_ARGS__ \
+	OP(TEXT_ORIENTATION,          "text-orientation") __VA_ARGS__ \
+	OP(TEXT_OVERFLOW,             "text-overflow") __VA_ARGS__ \
+	OP(TEXT_SHADOW,               "text-shadow") __VA_ARGS__ \
+	OP(TEXT_TRANSFORM,            "text-transform") __VA_ARGS__ \
+	OP(TEXT_UNDERLINE_POSITION,   "text-underline-position") __VA_ARGS__ \
+	OP(TOP,                       "top") __VA_ARGS__ \
+	OP(TRANSFORM,                 "transform") __VA_ARGS__ \
+	OP(TRANSFORM_ORIGIN,          "transform-origin") __VA_ARGS__ \
+	OP(TRANSFORM_STYLE,           "transform-style") __VA_ARGS__ \
+	OP(TRANSITION,                "transition") __VA_ARGS__ \
+	OP(TRANSITION_DELAY,          "transition-delay") __VA_ARGS__ \
+	OP(TRANSITION_DURATION,       "transition-duration") __VA_ARGS__ \
+	OP(TRANSITION_PROPERTY,       "transition-property") __VA_ARGS__ \
+	OP(TRANSITION_TIMING_FUNCTION,"transition-timing-function") __VA_ARGS__ \
+	OP(UNICODE_BIDI,              "unicode-bidi") __VA_ARGS__ \
+	OP(VERTICAL_ALIGN,            "vertical-align") __VA_ARGS__ \
+	OP(VISIBILITY,                "visibility") __VA_ARGS__ \
+	OP(VOICE_BALANCE,             "voice-balance") __VA_ARGS__ \
+	OP(VOICE_DURATION,            "voice-duration") __VA_ARGS__ \
+	OP(VOICE_FAMILY,              "voice-family") __VA_ARGS__ \
+	OP(VOICE_PITCH,               "voice-pitch") __VA_ARGS__ \
+	OP(VOICE_PITCH_RANGE,         "voice-pitch-range") __VA_ARGS__ \
+	OP(VOICE_RATE,                "voice-rate") __VA_ARGS__ \
+	OP(VOICE_STRESS,              "voice-stress") __VA_ARGS__ \
+	OP(VOICE_VOLUME,              "voice-volume") __VA_ARGS__ \
+	OP(VOLUME,                    "volume") __VA_ARGS__ \
+	OP(WHITE_SPACE,               "white-space") __VA_ARGS__ \
+	OP(WIDOWS,                    "widows") __VA_ARGS__ \
+	OP(WIDTH,                     "width") __VA_ARGS__ \
+	OP(WORD_BREAK,                "word-break") __VA_ARGS__ \
+	OP(WORD_SPACING,              "word-spacing") __VA_ARGS__ \
+	OP(WORD_WRAP,                 "word-wrap") __VA_ARGS__ \
+	OP(WRITING_MODE,              "writing-mode") __VA_ARGS__ \
+	OP(Z_INDEX,                   "z-index") __VA_ARGS__ \
+	OP(ZOOM,                      "zoom") __VA_ARGS__
