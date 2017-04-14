@@ -105,6 +105,18 @@ parse_desktop(){
 	done < "$1"
 }
 
+set_handler(){
+	#$1 is the name of the variable you want to set
+	#after shift the remaining $@ are executables you want to check for
+	var="$1"
+	shift
+	while ! type -p "$1" 2>&1 >/dev/null; do
+		shift #not found so go to next candidate
+	done
+	#this sets the variable to the value
+	eval $var=\"\$1\"
+}
+
 sh_test(){
 	local CorrectIFS="$IFS"
 	echo "nth() got:"
