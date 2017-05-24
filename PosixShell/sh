@@ -1,5 +1,7 @@
 #!/bin/ash
 
+#These use $@ instead of $1 in case users forget to quote the argument
+#and use [[ ... ]] instead of { return [[ ... ]] } for simplicity
 file_is_block()             [[ -b "$@" ]]
 file_is_char()              [[ -c "$@" ]]
 file_is_directory()         [[ -d "$@" ]]
