@@ -45,7 +45,7 @@ file_is_there()             [[ -e "$@" ]]
 file_is_to_tty()            [[ -t "$@" ]]
 file_is_writable()          [[ -w "$@" ]]
 files_are_hardlinked()      [[ "$1" -ef "$2" ]]
-files_are_not_hardlinked()  [[ "$1" -ef "$2" ]]
+files_are_not_hardlinked()  [[ ! "$1" -ef "$2" ]]
 
 
 getinput(){ #$1 can be character to print in place of characters for passwords
