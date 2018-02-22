@@ -49,6 +49,55 @@ files_are_not_hardlinked()  [[ ! "$1" -ef "$2" ]]
 iseven()                    [[ $(($1%2)) = 0 ]]
 isodd()                     [[ $(($1%2)) = 1 ]]
 
+isalnum() {
+	case "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" in
+	*$1*)return 0;;
+	esac
+	return 1
+}
+
+isalpha() {
+	case "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" in
+	*$1*)return 0;;
+	esac
+	return 1
+}
+
+isdigit() {
+	case "0123456789" in
+	*$1*)return 0;;
+	esac
+	return 1
+}
+
+islower() {
+	case "abcdefghijklmnopqrstuvwxyz" in
+	*$1*)return 0;;
+	esac
+	return 1
+}
+
+isspace() {
+	case " 
+	" in
+	*$1*)return 0;;
+	esac
+	return 1
+}
+
+isupper() {
+	case "ABCDEFGHIJKLMNOPQRSTUVWXYZ" in
+	*$1*)return 0;;
+	esac
+	return 1
+}
+
+isxdigit() {
+	case "0123456789abcdefABCDEF" in
+	*$1*)return 0;;
+	esac
+	return 1
+}
 
 
 getinput(){ #$1 can be character to print in place of characters for passwords
