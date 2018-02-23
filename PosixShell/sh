@@ -47,7 +47,7 @@ file_is_writable()          [[ -w "$@" ]]
 files_are_hardlinked()      [[ "$1" -ef "$2" ]]
 files_are_not_hardlinked()  [[ ! "$1" -ef "$2" ]]
 iseven()                    [[ $(($1%2)) = 0 ]]
-isodd()                     [[ $(($1%2)) = 1 ]]
+isodd()                     [[ ! $(($1%2)) = 0 ]]
 
 isalnum() {
 	case "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" in
