@@ -48,6 +48,7 @@
 
   1.  To allow inlining of a function in a shared library you can provide an alternative static inline version of the functions you want to be inlined in your header file (for example)
 
+```c
         #ifdef INLINE_FOOSTUFF
         static inline void foo(void){ /*do stuff*/ }
         static inline void bar(void){ /*do stuff*/ }
@@ -55,6 +56,7 @@
         void foo(void);
         void bar(void);
         #endif
+```
 
   2. You can split out `foo()` an `bar()` above into a static library and compile it with link time optimization.
 
