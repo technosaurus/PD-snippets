@@ -4,12 +4,12 @@
  
   * **Inside the calling function** several things need to be done before and after calling the function
     * **Before calling**
-      - callee clobbered registers need to be save somewhere (usually stack)
+      - callee clobbered registers need to be saved somewhere (usually stack)
       - parameter variables need to be pushed onto the stack
       - return address needs to be stored (kinda like a string in a cave)
     * **After calling**
       - callee clobbered registers need to be restored
-      - the return value may need to be move to a more appropriate location
+      - the return value may need to be moved to a more appropriate location
   * **Inside the called function** several things need to be done before executing the function code
       - **(prologue)**
       - Any registers that the function uses that are not designated by the calling convention need to be saved (usually to stack)
@@ -61,3 +61,22 @@
   2. You can split out `foo()` an `bar()` above into a static library and compile it with link time optimization.
 
   3. You can split out `foo()` an `bar()` above into a single header library.
+
+## New Programming Language alternative
+
+  1. Use the compiler to define the calling convention on a per function basis
+  2. Leaf functions would be optimized fully and then update the header file with its parameter registers, returns and clobbers.
+  3. Other functions would need to navigate around constraints of its leaf functions
+  4. Since it doesn't rely on a system specific calling convention, only a small entry point (`_start()`) would be needed outside of a single architecture 
+
+# Example.
+```c
+    divmod(int,int):(int,int);
+    //becomes this on x after build on x86
+
+    divmod(int:eax,int:edx)(int:eax,int:edx):none;
+    /* Since div returns the quotient on eax and the remainder on edx,
+     * they are the most efficient registers to use for the diviedend and divisor
+     * no other registers or memory are clobbered
+     */
+```
