@@ -44,3 +44,17 @@ sqrtv:
 ### Compiler + Linker options that can reduce code size ###
 
 `-flto` OR `-ffunction-sections` `-fdata-sections` + `-Wl,--gc-sections`
+
+```sh
+# FOR COMPACT UTILITIES (MAXIMUM STORAGE SAVINGS)
+clang -Oz -flto=thin -ffunction-sections -fdata-sections \
+      -mllvm -enable-gvn-hoist=1 -mllvm -enable-gvn-sink=1 \
+      -mllvm -inline-threshold=5 -fno-ident \
+      -Wl,--gc-sections -Wl,--icf=all input.c -o output
+
+# FOR COMPUTE ENGINES (MAXIMUM NATIVE SPEED EXECUTIONS)
+clang -Ofast -flto=thin -fstrict-aliasing -fomit-frame-pointer \
+      -fno-semantic-interposition input.c -o output
+```
+
+
