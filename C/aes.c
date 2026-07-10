@@ -83,7 +83,8 @@ void aes128(void *data, const void *skey){
 	state->m = tmp.m ^ key.m; //smallest and fastest with simd
 }
 
-
+// Fast branchless x2 multiplication macro in GF(2^8)
+//#define xtime(x) ((uint8_t)(((x) << 1) ^ ((((x) >> 7) & 1) * 0x1B)))
 #define xtime(x) (((x) & 0x80) ? (((x) << 1) ^ 0x1b) : ((x)<<1))
 void inv_aes(void *data, const void *skey){
 	uint8_t state[16], key[11][16], *in = data;
