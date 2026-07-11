@@ -126,3 +126,68 @@ if [ -z "$HANDLER" ]; then
     done
 fi
 
+applet_file_browser() {
+    TARGET_DIR="${1:-$HOME}"
+    
+    # Normalize trailing slash
+    case "$TARGET_DIR" in
+        */) ;;
+        *) TARGET_DIR="${TARGET_DIR}/" ;;
+    esac
+
+    # JWM requires an enveloping root XML tag for dynamic menus
+    echo "<JWM>"
+    
+    # 1. Provide an administrative escape hatch terminal link
+    echo "  <Program label=\"[ Open Terminal Here ]\" icon=\"terminal.png\">cd \"$TARGET_DIR\" && exec rxvt</Program>"
+    echo "  <Separator/>"
+
+    # 2. Loop through files and directories inside the current target path
+    for entry in "${TARGET_DIR}"*; do
+        [ -e "$entry" ] || continue
+        NAME="${entry##*/}"
+
+        if [ -d "$entry" ]; then
+            # --- DIRECTORY HANDLING ---
+            # Recursively spawns a brand new, hot-cached dynamic sub-menu on hover
+            echo "  <Menu label=\"${NAME}/\" icon=\"folder.png\">"
+            echo "    <Dynamic>exec:bashbox file-browser \"$entry\"</Dynamic>"
+            echo "  </Menu>"
+        else
+            # --- REGULAR FILE HANDLING ---
+            # Automatically detect file MIME type via BusyBox / Toybox
+            MIME_TYPE=$(file -b --mime-type "$entry" 2>/dev/null)
+            [ -z "$MIME_TYPE" ] && MIME_TYPE="application/octet-stream"
+
+            # Dynamic Icon Assignment based on basic MIME matching structures
+            case "$MIME_TYPE" in
+                text/*|application/json|application/xml) ICON="text-x-generic.png" ;;
+                image/*)                                 ICON="image-x-generic.png" ;;
+                audio/*|video/*)                         ICON="audio-x-generic.png" ;;
+                application/x-executable|application/x-sharedlib) ICON="application-x-executable.png" ;;
+                *)                                       ICON="application-x-octet-stream.png" ;;
+            esac
+
+            # Encapsulate the file inside its own nested contextual action menu block
+            echo "  <Menu label=\"$NAME\" icon=\"$ICON\">"
+            
+            # Action 1: Open Option (Routes straight to your xdg-open applet)
+            echo "    <Program label=\"[ Open ]\" icon=\"eye.png\">bashbox xdg-open \"$entry\"</Program>"
+            
+            # Action 2: Edit Option (Routes straight to your custom xdg-edit applet)
+            echo "    <Program label=\"[ Edit ]\" icon=\"pencil.png\">bashbox xdg-edit \"$entry\"</Program>"
+            
+            echo "    <Separator/>"
+            
+            # Action 3: Secure Delete Option (Generates a nested confirmation safety sub-menu)
+            echo "    <Menu label=\"[ Delete... ]\" icon=\"edit-delete.png\">"
+            echo "      <Program label=\"⚠️ NO, Cancel\" icon=\"gtk-cancel.png\">true</Program>"
+            echo "      <Program label=\"🔥 YES, Delete Permanently\" icon=\"gtk-ok.png\">rm -f \"$entry\"</Program>"
+            echo "    </Menu>"
+            
+            echo "  </Menu>"
+        fi
+    done
+
+    echo "</JWM>"
+}
