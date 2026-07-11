@@ -104,3 +104,25 @@ done
 
 echo "Done! File saved as: $OUTPUT_FILE"
 
+
+
+#!/bin/sh
+# Minimalist PoC for xdg-edit key parsing to share with upstream maintainers
+FILE_MIME=$(file -b --mime-type "$1")
+CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.edit"
+
+# 1. Check user explicit defaults first
+HANDLER=$(grep "^${FILE_MIME}=" "$CONFIG" | cut -d'=' -f2)
+
+# 2. Dynamic fallback scanning for the array key across standard paths
+if [ -z "$HANDLER" ]; then
+    for dir in ~/.local/share/applications /usr/share/applications; do
+        for dt in "$dir"/*.desktop; do
+            if grep -q "^X-Xlibre-MimeEdit=.*;${FILE_MIME};" "$dt" 2>/dev/null; then
+                EXEC_CMD=$(grep "^Exec=" "$dt" | head -n1 | cut -d'=' -f2- | sed 's/%[fFuU]//g')
+                exec $EXEC_CMD "$1"
+            fi
+        done
+    done
+fi
+
