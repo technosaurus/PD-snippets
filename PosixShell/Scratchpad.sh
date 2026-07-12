@@ -191,3 +191,6 @@ applet_file_browser() {
 
     echo "</JWM>"
 }
+
+#don't waste time and space linking every file in a directory when bind mount is appropriate
+#sudo mount --bind /usr/share/applications /home/yourusername/.config/applications
