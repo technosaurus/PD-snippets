@@ -194,3 +194,7 @@ applet_file_browser() {
 
 #don't waste time and space linking every file in a directory when bind mount is appropriate
 #sudo mount --bind /usr/share/applications /home/yourusername/.config/applications
+#however bind mount are full write or read only, to make the source read only but keep write capacity
+#sudo mount -t overlay overlay -o lowerdir=/usr/share/applications,upperdir=$HOME/.overlays/apps_upper,workdir=$HOME/.overlays/apps_upper \
+#  $HOME/.config/applications
+  
