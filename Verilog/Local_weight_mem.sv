@@ -36,7 +36,11 @@ module local_weight_mem #(
     end
 
     // Asynchronous Read Operations: Guarantees zero-cycle latency access to parameters
-    assign read_data_A = memory_array[read_addr_A];
-    assign read_data_B = memory_array[read_addr_B];
+    // assign read_data_A = memory_array[read_addr_A];
+    // assign read_data_B = memory_array[read_addr_B];
+always_ff @(posedge clk) begin
+    read_data_A <= memory_array[read_addr_A];
+    read_data_B <= memory_array[read_addr_B];
+end
 
 endmodule
