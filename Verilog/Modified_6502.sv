@@ -35,6 +35,10 @@ module modified_6502_core #(
     logic [DATA_WIDTH-1:0]          current_weight_B;
     logic signed [ACCUM_WIDTH-1:0]  mac_result_A;
     logic signed [ACCUM_WIDTH-1:0]  mac_result_B;
+    // Pipeline Register to split the dual-MAC critical path
+    logic signed [ACCUM_WIDTH-1:0]  reg_mac_intermediate;
+    logic [DATA_WIDTH-1:0]          reg_in_diag_right;
+ 
 
     // ------------------------------------------------------------------------
     // SUB-MODULE: Localized Weight Memory (Unified Block/Distributed RAM)
@@ -65,9 +69,11 @@ module modified_6502_core #(
     );
 
     mac_engine #(.DATA_WIDTH(DATA_WIDTH), .ACCUM_WIDTH(ACCUM_WIDTH)) mac_unit_R (
-        .operand_data(in_diag_right),
+        //.operand_data(in_diag_right),
+        .operand_data(reg_in_diag_right),
         .operand_weight(current_weight_B),
-        .accum_in(mac_result_A),                     // Cascade accumulate results directly 
+        //.accum_in(mac_result_A),         // Cascade accumulate results directly
+        .accum_in(reg_mac_intermediate), 
         .accum_out(mac_result_B)
     );
 
@@ -101,11 +107,17 @@ module modified_6502_core #(
                 reg_X <= reg_X + 1'b1;
                 reg_Y <= {ADDR_WIDTH{1'b0}};
                 reg_A <= {ACCUM_WIDTH{1'b0}};
+                reg_mac_intermediate <= {ACCUM_WIDTH{1'b0}};
+                reg_in_diag_right    <= {DATA_WIDTH{1'b0}};
             end else begin
                 // --- MODE 2: LOCKED DATAFLOW MODE (S = 1) ---
                 // The Instruction Decoder is completely bypassed.
                 // The core cycles through weight rows automatically to evaluate tensor lines.
                 reg_A <= {ACCUM_WIDTH{1'b0}};        // Clear Accumulator cache for the next wavefront
+                
+                // Store the intermediate math states to break the execution critical path
+                reg_mac_intermediate <= mac_result_A;
+                reg_in_diag_right    <= in_diag_right;
                 
                 // Auto-increment tensor weight pointers to keep execution continuous
                 if (reg_X >= (64 - 2)) begin
