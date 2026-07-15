@@ -47,6 +47,7 @@ typedef enum {
     // Expressions
     NODE_BINARY_OP,
     NODE_UNARY_OP,
+    NODE_LOGICAL_OP,
     NODE_ASSIGNMENT,
 
     // Statements & Control Flow
@@ -61,7 +62,7 @@ typedef enum {
 /* =========================================================================
    3. ABSTRACT SYNTAX TREE STRUCTURE
    ========================================================================= */
-typedef struct ASTNode {
+typedef struct ASTNode { //todo reorder with enums
     NodeType type;
     union {
         // NODE_LITERAL: Constant values (e.g., 42, "hello", true)
@@ -117,6 +118,11 @@ typedef struct ASTNode {
             struct ASTNode** arguments; // Dynamic array of ASTNode expression trees
             int arg_count;
         } call;
+        struct {
+            char* type_str; // "and" or "or"
+            struct ASTNode* left;
+            struct ASTNode* right;
+        } logical;
 
     } data;
 } ASTNode;
@@ -133,6 +139,7 @@ ASTNode* create_identifier_node(const char* name);
 // Operator Node Constructors
 ASTNode* create_unary_node(char op, ASTNode* operand);
 ASTNode* create_binary_node(char op, ASTNode* left, ASTNode* right);
+ASTNode* create_logical_node(const char* type_str, ASTNode* left, ASTNode* right);
 ASTNode* create_assignment_node(const char* name, ASTNode* value);
 
 // Control Flow Constructors
