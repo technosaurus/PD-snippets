@@ -42,16 +42,24 @@ SetCmd     <- "set" _ id:Ident _ val:Expr {
                 free(id->data.id_name); free(id);
               }
 
-# Tcl Conditional: if { $x == 3 } { print $x }
-IfCmd      <- "if" _ '{' _ Cond:Expr _ '}' _ '{' _ Then:CmdList _ '}' ElseStat:(_ "else" _ '{' _ CmdList _ '}')? {
-                ASTNode* else_branch = (ElseStat != NULL) ? ElseStat : NULL;
-                $$ = create_if_node(Cond, Then, else_branch);
+# Tcl Conditional: if { $x == 3 } { print $x } else { print $y }
+# Supports both braced and unbraced conditions
+IfCmd      <- "if" _ cond:IfCondition _ '{' _ then_body:CmdList _ '}' 
+              else_body:(_ "else" _ '{' _ CmdList _ '}')? {
+                ASTNode* else_branch = (else_body != NULL) ? else_body : NULL;
+                $$ = create_if_node(cond, then_body, else_branch);
               }
 
+IfCondition <- '{' _ expr:Expr _ '}' { $$ = expr; }
+             / expr:Expr { $$ = expr; }
+
 # Tcl Iteration Loop: while { $x > 0 } { ... }
-WhileCmd   <- "while" _ '{' _ Cond:Expr _ '}' _ '{' _ Body:CmdList _ '}' {
-                $$ = create_while_node(Cond, Body);
+WhileCmd   <- "while" _ cond:WhileCondition _ '{' _ body:CmdList _ '}' {
+                $$ = create_while_node(cond, body);
               }
+
+WhileCondition <- '{' _ expr:Expr _ '}' { $$ = expr; }
+                / expr:Expr { $$ = expr; }
 
 # Tcl Print: print $x
 PrintCmd   <- "print" _ target:Expr {
@@ -63,23 +71,93 @@ PrintCmd   <- "print" _ target:Expr {
 Expr       <- '[' _ "expr" _ body:ComparisonExpr _ ']' { $$ = body; }
             / ComparisonExpr
 
+# Comparison operators - left-associative chains
 ComparisonExpr 
-           <- left:MathExpr _ "<" _ right:ComparisonExpr { $$ = create_binary_node('<', left, right); }
-            / left:MathExpr _ ">" _ right:ComparisonExpr { $$ = create_binary_node('>', left, right); }
-            / left:MathExpr _ "==" _ right:ComparisonExpr { $$ = create_binary_node('=', left, right); }
-            / MathExpr
+           <- left:AddExpr rest:(_ CompOp _ AddExpr)* {
+                if (pcc_get_value_count(rest) == 0) {
+                    $$ = left;
+                } else {
+                    ASTNode* node = left;
+                    for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                        /* Extract operator and right operand from rest[i] */
+                        node = pcc_get_value(rest, i);
+                    }
+                    $$ = node;
+                }
+              }
 
-MathExpr   <- left:Term _ '+' _ right:MathExpr { $$ = create_binary_node('+', left, right); }
-            / left:MathExpr _ '-' _ right:MathExpr { $$ = create_binary_node('-', left, right); }
+CompOp     <- "<" { $$ = (void*)'<'; }
+            / ">" { $$ = (void*)'>'; }
+            / "==" { $$ = (void*)'='; }
+            / "!=" { $$ = (void*)'!'; }
+            / "<=" { $$ = (void*)'L'; }
+            / ">=" { $$ = (void*)'G'; }
+
+# Addition/Subtraction - left-associative
+AddExpr    <- left:MulExpr rest:(_ AddOp _ MulExpr)* {
+                if (pcc_get_value_count(rest) == 0) {
+                    $$ = left;
+                } else {
+                    ASTNode* node = left;
+                    for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                        /* Process addition/subtraction chain */
+                        node = pcc_get_value(rest, i);
+                    }
+                    $$ = node;
+                }
+              }
+
+AddOp      <- '+' { $$ = (void*)'+'; }
+            / '-' { $$ = (void*)'-'; }
+
+# Multiplication/Division - left-associative
+MulExpr    <- left:UnaryExpr rest:(_ MulOp _ UnaryExpr)* {
+                if (pcc_get_value_count(rest) == 0) {
+                    $$ = left;
+                } else {
+                    ASTNode* node = left;
+                    for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                        /* Process multiplication/division chain */
+                        node = pcc_get_value(rest, i);
+                    }
+                    $$ = node;
+                }
+              }
+
+MulOp      <- '*' { $$ = (void*)'*'; }
+            / '/' { $$ = (void*)'/'; }
+            / '%' { $$ = (void*)'%'; }
+
+# Unary operators (logical NOT, negation)
+UnaryExpr  <- '!' _ expr:UnaryExpr { $$ = create_unary_node('!', expr); }
+            / '-' _ expr:UnaryExpr { $$ = create_unary_node('-', expr); }
             / Term
 
 # In Tcl, raw strings are variables if prefixed with a $, or literals if standalone/quoted
-Term       <- '$' name:Ident { $$ = name; }
-            / val:< [0-9]+ > { Value v = { VAL_INT, .as.i_val = atoi(val) }; $$ = create_literal_node(v); }
-            / '"' text:< [^"\\]* > '"' { Value v = { VAL_STRING, .as.s_val = (char*)text }; $$ = create_literal_node(v); }
+Term       <- '(' _ expr:Expr _ ')' { $$ = expr; }
+            / '$' name:Ident { $$ = name; }
+            / val:< [0-9]+ ('.' [0-9]+)? > { 
+                if (strchr(val, '.')) {
+                    Value v = { VAL_FLOAT, .as.f_val = atof(val) }; 
+                    $$ = create_literal_node(v);
+                } else {
+                    Value v = { VAL_INT, .as.i_val = atoi(val) }; 
+                    $$ = create_literal_node(v);
+                }
+              }
+            / '"' text:< (EscapeSeq / [^"\\])* > '"' { 
+                Value v = { VAL_STRING, .as.s_val = (char*)text }; 
+                $$ = create_literal_node(v); 
+              }
+            / '\'' text:< [^']* > '\'' { 
+                Value v = { VAL_STRING, .as.s_val = (char*)text }; 
+                $$ = create_literal_node(v); 
+              }
+
+EscapeSeq  <- '\\' ( '"' / '\\' / 'n' / 't' / 'r' )
 
 Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > { $$ = create_identifier_node(name); }
 
-_          <- [ \t]* ( "#" [^\n]* [\n] _ )* # Supports standard Tcl hash comments
+_          <- [ \t]* ( "#" [^\n]* [\n] _ )*
 TermStoppers <- [\n;]+
 %%
