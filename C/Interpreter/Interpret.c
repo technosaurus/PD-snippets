@@ -105,7 +105,7 @@ Value execute_ast(ASTNode* node, Environment* env) {
     Value null_val = { VAL_NULL, {0} };
     if (!node) return null_val;
 
-    switch (node->type) {
+    switch (node->type) { //todo reorder to enum for jump table
         
         case NODE_LITERAL: {
             // Return literals instantly. Strings are cloned so the pipeline remains pure.
@@ -238,6 +238,55 @@ Value execute_ast(ASTNode* node, Environment* env) {
             else if (target.type == VAL_BOOL) printf("%s\n", target.as.b_val ? "true" : "false");
             return target; // Returns evaluated values upstream
         }
+        case NODE_FUNCTION_CALL: {
+            Environment* func_env_entry = env_find(env, node->data.call.name);
+            if (!func_env_entry || func_env_entry->value.type != VAL_FUNCTION) {
+                fprintf(stderr, "Runtime Error: '%s' is not an executable function.\n", node->data.call.name);
+                exit(EXIT_FAILURE);
+            }
+
+            FunctionObj function = func_env_entry->value.as.func;
+            if (node->data.call.arg_count != function.param_count) {
+                fprintf(stderr, "Runtime Error: Function '%s' expects %d arguments, but got %d.\n",
+                        node->data.call.name, function.param_count, node->data.call.arg_count);
+                exit(EXIT_FAILURE);
+            }
+
+            // 1. Evaluate arguments before opening the target execution scope context
+            Value* evaluated_args = malloc(sizeof(Value) * node->data.call.arg_count);
+            for (int i = 0; i < node->data.call.arg_count; i++) {
+                evaluated_args[i] = execute_ast(node->data.call.arguments[i], env);
+            }
+
+            // 2. Build local execution scope layer frames linking directly to global frame
+            Environment local_frame = { .name = "__local_func__", .value = null_val, .outer = env };
+            
+            // Inject bound variable states into the newly generated execution context
+            for (int i = 0; i < function.param_count; i++) {
+                Environment* param_binding = malloc(sizeof(Environment));
+                param_binding->name = strdup(function.parameters[i]);
+                param_binding->value = evaluated_args[i]; // Binds variables natively
+                param_binding->outer = local_frame.outer;
+                local_frame.outer = param_binding;
+            }
+
+            // 3. Execute the function body code blocks
+            Value return_val = execute_ast(function.body, &local_frame);
+
+            // Clean up evaluated storage arrays and parameter environment frames
+            Environment* cur = local_frame.outer;
+            while (cur != env && cur != NULL) {
+                Environment* next = cur->outer;
+                free((char*)cur->name);
+                free_value(cur->value);
+                free(cur);
+                cur = next;
+            }
+            free(evaluated_args);
+
+            return return_val;
+        }
+
     }
     return null_val;
 }
