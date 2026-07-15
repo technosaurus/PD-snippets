@@ -3,6 +3,23 @@
 %header {
     #include "ast.h"
     #define PCC_GETCHAR(aux) awk_get_next_char(aux)
+    
+    /* Operator type definitions for clarity */
+    typedef enum {
+        OP_PLUS = '+',
+        OP_MINUS = '-',
+        OP_MUL = '*',
+        OP_DIV = '/',
+        OP_MOD = '%',
+        OP_LT = '<',
+        OP_GT = '>',
+        OP_LE = 'L',      /* <= */
+        OP_GE = 'G',      /* >= */
+        OP_EQ = '=',      /* == */
+        OP_NE = '!',      /* != */
+        OP_AND = '&',     /* && */
+        OP_OR = '|'       /* || */
+    } OperatorType;
 }
 
 %source {
@@ -15,14 +32,22 @@
 
 # --- Parsing Rules ---
 
-#Program    <- _ blocks:BlockList _ { $$ = blocks; }
-Program    <- init:BeginBlock? _ body:BlockList {
-                $$ = create_program_root(init, body);
+# Top-level program structure
+Program    <- init:BeginBlock? _ body:BlockList? _ end:EndBlock? {
+                $$ = create_program_root(init, body, end);
               }
-              / _ blocks:BlockList _ { $$ = blocks; }
 
-BeginBlock <- "BEGIN" _ "{" _ list:ActionList _ "}" { $$ = list
+# BEGIN block - executed before processing input
+BeginBlock <- "BEGIN" _ "{" _ list:ActionList _ "}" {
+                $$ = list;
+              }
 
+# END block - executed after processing input
+EndBlock   <- "END" _ "{" _ list:ActionList _ "}" {
+                $$ = list;
+              }
+
+# Main body: pattern-action pairs
 BlockList  <- first:PatternAction rest:(_ PatternAction)* {
                 ASTNode* block = create_block_node();
                 append_to_block(block, first);
@@ -32,17 +57,18 @@ BlockList  <- first:PatternAction rest:(_ PatternAction)* {
                 $$ = block;
               }
 
-# AWK structural pattern match: condition { actions }
-# We translate this paradigm straight into a standard NODE_IF_STATEMENT!
+# AWK pattern-action: condition { statements }
+# Patterns can be: expression, /regex/, range (pat1, pat2), or omitted (always true)
 PatternAction <- cond:Expr _ "{" _ body:ActionList _ "}" {
-                $$ = create_if_node(cond, body, NULL);
-               }
-               / "{" _ body:ActionList _ "}" {
-                /* If condition is omitted, pass a 'true' literal so it always executes */
-                Value true_val = { VAL_BOOL, .as.b_val = true };
-                $$ = create_if_node(create_literal_node(true_val), body, NULL);
-               }
+                    $$ = create_if_node(cond, body, NULL);
+                  }
+                / "{" _ body:ActionList _ "}" {
+                    /* Omitted condition means always execute */
+                    Value true_val = { VAL_BOOL, .as.b_val = true };
+                    $$ = create_if_node(create_literal_node(true_val), body, NULL);
+                  }
 
+# Sequence of statements
 ActionList <- first:Stat rest:(_ Stat)* {
                 ASTNode* block = create_block_node();
                 append_to_block(block, first);
@@ -52,36 +78,286 @@ ActionList <- first:Stat rest:(_ Stat)* {
                 $$ = block;
               }
 
-Stat       <- AssignStat _ ";"?
+# Individual statements
+Stat       <- IfStatement
+            / WhileStatement
+            / ForStatement
+            / BreakStatement
+            / ContinueStatement
+            / NextStatement
+            / ExitStatement
+            / DeleteStatement
             / PrintStat _ ";"?
+            / AssignStat _ ";"?
             / Expr _ ";"?
 
+# Control flow statements
+IfStatement <- "if" _ "(" _ cond:Expr _ ")" _ "{" _ then_body:ActionList _ "}" 
+                (_ "else" _ "{" _ else_body:ActionList _ "}")? {
+                    $$ = create_if_node(cond, then_body, else_body);
+                  }
+
+WhileStatement <- "while" _ "(" _ cond:Expr _ ")" _ "{" _ body:ActionList _ "}" {
+                    $$ = create_while_node(cond, body);
+                  }
+
+ForStatement <- "for" _ "(" _ init:Expr? _ ";" _ cond:Expr? _ ";" _ update:Expr? _ ")" _ "{" _ body:ActionList _ "}" {
+                    $$ = create_for_node(init, cond, update, body);
+                  }
+               / "for" _ "(" _ var:Ident _ "in" _ arr:Ident _ ")" _ "{" _ body:ActionList _ "}" {
+                    $$ = create_for_in_node(var, arr, body);
+                  }
+
+BreakStatement <- "break" {
+                    $$ = create_break_node();
+                  }
+
+ContinueStatement <- "continue" {
+                      $$ = create_continue_node();
+                    }
+
+NextStatement <- "next" {
+                  $$ = create_next_node();
+                }
+
+ExitStatement <- "exit" _ code:Expr? {
+                  $$ = create_exit_node(code);
+                }
+
+DeleteStatement <- "delete" _ arr:Ident _ "[" _ index:Expr _ "]" {
+                    $$ = create_delete_node(arr, index);
+                  }
+
+# Assignment statement
 AssignStat <- id:Ident _ "=" _ expr:Expr {
                 $$ = create_assignment_node(id->data.id_name, expr);
-                free(id->data.id_name); free(id);
+                free(id->data.id_name); 
+                free(id);
+              }
+            / arr:Ident _ "[" _ index:Expr _ "]" _ "=" _ expr:Expr {
+                $$ = create_array_assignment_node(arr->data.id_name, index, expr);
+                free(arr->data.id_name);
+                free(arr);
               }
 
-PrintStat  <- "print" _ expr:Expr {
-                $$ = create_print_node(expr);
+# Print statement
+PrintStat  <- "print" _ exprs:PrintExprList? {
+                $$ = create_print_node(exprs);
+              }
+            / "printf" _ fmt:Expr (_ "," _ args:ExprList)? {
+                $$ = create_printf_node(fmt, args);
               }
 
-Expr       <- ComparisonExpr
+PrintExprList <- first:Expr rest:(_ "," _ Expr)* {
+                    ASTNode* list = create_expr_list();
+                    append_to_list(list, first);
+                    for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                        append_to_list(list, pcc_get_value(rest, i));
+                    }
+                    $$ = list;
+                  }
 
-ComparisonExpr 
-           <- left:MathExpr _ "<" _ right:ComparisonExpr { $$ = create_binary_node('<', left, right); }
-            / left:MathExpr _ ">" _ right:ComparisonExpr { $$ = create_binary_node('>', left, right); }
-            / left:MathExpr _ "==" _ right:ComparisonExpr { $$ = create_binary_node('=', left, right); }
-            / MathExpr
+ExprList   <- first:Expr rest:(_ "," _ Expr)* {
+                ASTNode* list = create_expr_list();
+                append_to_list(list, first);
+                for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                    append_to_list(list, pcc_get_value(rest, i));
+                }
+                $$ = list;
+              }
 
-MathExpr   <- left:Term _ '+' _ right:MathExpr { $$ = create_binary_node('+', left, right); }
-            / left:MathExpr _ '-' _ right:MathExpr { $$ = create_binary_node('-', left, right); }
-            / Term
+# Expression hierarchy with proper precedence
+Expr       <- LogicalOrExpr
 
-Term       <- val:< [0-9]+ > { Value v = { VAL_INT, .as.i_val = atoi(val) }; $$ = create_literal_node(v); }
-            / '"' text:< [^"\\]* > '"' { Value v = { VAL_STRING, .as.s_val = (char*)text }; $$ = create_literal_node(v); }
-            / Ident
+LogicalOrExpr <- left:LogicalAndExpr _ "||" _ right:LogicalOrExpr {
+                    $$ = create_binary_node(OP_OR, left, right);
+                  }
+               / LogicalAndExpr
 
-Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > { $$ = create_identifier_node(name); }
+LogicalAndExpr <- left:InExpr _ "&&" _ right:LogicalAndExpr {
+                     $$ = create_binary_node(OP_AND, left, right);
+                   }
+                / InExpr
 
-_          <- [ \t\n\r]* ( "#" [^\n]* [\n] _ )* # Supports standard AWK shell-style comments
+# Check if index is in array
+InExpr     <- index:ComparisonExpr _ "in" _ arr:Ident {
+                $$ = create_in_node(index, arr);
+              }
+            / ComparisonExpr
+
+# Comparison operators
+ComparisonExpr <- left:MatchExpr _ "==" _ right:ComparisonExpr {
+                    $$ = create_binary_node(OP_EQ, left, right);
+                  }
+                / left:MatchExpr _ "!=" _ right:ComparisonExpr {
+                    $$ = create_binary_node(OP_NE, left, right);
+                  }
+                / left:MatchExpr _ "<=" _ right:ComparisonExpr {
+                    $$ = create_binary_node(OP_LE, left, right);
+                  }
+                / left:MatchExpr _ ">=" _ right:ComparisonExpr {
+                    $$ = create_binary_node(OP_GE, left, right);
+                  }
+                / left:MatchExpr _ "<" _ right:ComparisonExpr {
+                    $$ = create_binary_node(OP_LT, left, right);
+                  }
+                / left:MatchExpr _ ">" _ right:ComparisonExpr {
+                    $$ = create_binary_node(OP_GT, left, right);
+                  }
+                / MatchExpr
+
+# Regex matching operators
+MatchExpr  <- left:ConcatExpr _ "~" _ pattern:ConcatExpr {
+                $$ = create_regex_match_node(left, pattern, 1);
+              }
+            / left:ConcatExpr _ "!~" _ pattern:ConcatExpr {
+                $$ = create_regex_match_node(left, pattern, 0);
+              }
+            / ConcatExpr
+
+# String concatenation (implicit)
+ConcatExpr <- first:AddExpr rest:(_ !("+" / "-" / "*" / "/" / "%" / "==" / "!=" / "<" / ">" / "<=" / ">=" / "&&" / "||" / "~" / "!~" / "in" / ";") addexpr:AddExpr)* {
+                if (pcc_get_value_count(rest) == 0) {
+                    $$ = first;
+                } else {
+                    ASTNode* result = first;
+                    for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                        result = create_binary_node(OP_CONCAT, result, pcc_get_value(rest, i));
+                    }
+                    $$ = result;
+                }
+              }
+
+# Addition and subtraction
+AddExpr    <- left:MulExpr _ "+" _ right:AddExpr {
+                $$ = create_binary_node(OP_PLUS, left, right);
+              }
+            / left:MulExpr _ "-" _ right:AddExpr {
+                $$ = create_binary_node(OP_MINUS, left, right);
+              }
+            / MulExpr
+
+# Multiplication, division, and modulo
+MulExpr    <- left:UnaryExpr _ "*" _ right:MulExpr {
+                $$ = create_binary_node(OP_MUL, left, right);
+              }
+            / left:UnaryExpr _ "/" _ right:MulExpr {
+                $$ = create_binary_node(OP_DIV, left, right);
+              }
+            / left:UnaryExpr _ "%" _ right:MulExpr {
+                $$ = create_binary_node(OP_MOD, left, right);
+              }
+            / UnaryExpr
+
+# Unary operators
+UnaryExpr  <- "!" _ expr:UnaryExpr {
+                $$ = create_unary_node('!', expr);
+              }
+            / "-" _ expr:UnaryExpr {
+                $$ = create_unary_node('-', expr);
+              }
+            / "+" _ expr:UnaryExpr {
+                $$ = create_unary_node('+', expr);
+              }
+            / PostfixExpr
+
+# Postfix operators (increment/decrement)
+PostfixExpr <- expr:PrimaryExpr _ "++" {
+                  $$ = create_postfix_node(expr, OP_PLUS);
+                }
+              / expr:PrimaryExpr _ "--" {
+                  $$ = create_postfix_node(expr, OP_MINUS);
+                }
+              / PrimaryExpr
+
+# Primary expressions
+PrimaryExpr <- "(" _ expr:Expr _ ")" {
+                  $$ = expr;
+                }
+              / FunctionCall
+              / FieldRef
+              / ArrayRef
+              / BuiltinVar
+              / Number
+              / String
+              / Ident
+
+# Function call
+FunctionCall <- name:< [a-zA-Z_][a-zA-Z0-9_]* > _ "(" _ args:ExprList? _ ")" {
+                  $$ = create_function_call_node(name, args);
+                }
+
+# Field reference: $1, $2, $NF, etc.
+FieldRef   <- "$" _ index:UnaryExpr {
+                $$ = create_field_ref_node(index);
+              }
+
+# Array reference: arr[index]
+ArrayRef   <- name:Ident _ "[" _ index:Expr _ "]" {
+                $$ = create_array_ref_node(name->data.id_name, index);
+                free(name->data.id_name);
+                free(name);
+              }
+
+# Built-in variables
+BuiltinVar <- "NR" { 
+                $$ = create_builtin_var_node("NR");
+              }
+            / "NF" {
+                $$ = create_builtin_var_node("NF");
+              }
+            / "FS" {
+                $$ = create_builtin_var_node("FS");
+              }
+            / "OFS" {
+                $$ = create_builtin_var_node("OFS");
+              }
+            / "RS" {
+                $$ = create_builtin_var_node("RS");
+              }
+            / "ORS" {
+                $$ = create_builtin_var_node("ORS");
+              }
+            / "FILENAME" {
+                $$ = create_builtin_var_node("FILENAME");
+              }
+
+# Number literals (integers and floats)
+Number     <- val:< [0-9]+ ("." [0-9]+)? ([eE] [+-]? [0-9]+)? > {
+                Value v;
+                if (strchr(val, '.') || strchr(val, 'e') || strchr(val, 'E')) {
+                    v.type = VAL_FLOAT;
+                    v.as.f_val = atof(val);
+                } else {
+                    v.type = VAL_INT;
+                    v.as.i_val = atoi(val);
+                }
+                $$ = create_literal_node(v);
+              }
+
+# String literals with proper escape sequence handling
+String     <- '"' text:< (EscapeSeq / [^"\\])* > '"' {
+                Value v = { VAL_STRING, .as.s_val = (char*)text };
+                $$ = create_literal_node(v);
+              }
+
+# Escape sequences in strings
+EscapeSeq  <- "\\" (
+                "n" { /* handled in AST */ }
+                / "t" { /* handled in AST */ }
+                / "r" { /* handled in AST */ }
+                / "\\" { /* handled in AST */ }
+                / '"' { /* handled in AST */ }
+                / "x" [0-9a-fA-F]+ { /* hex escape */ }
+                / [0-7]+ { /* octal escape */ }
+              )
+
+# Identifier
+Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > {
+                $$ = create_identifier_node(name);
+              }
+
+# Whitespace and comments
+_          <- ([ \t\n\r] / "#" [^\n]* "\n")*
+
 %%
