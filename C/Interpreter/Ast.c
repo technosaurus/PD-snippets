@@ -106,6 +106,14 @@ ASTNode* create_call_node(const char* name) {
     return node;
 }
 
+ASTNode* create_index_node(ASTNode* target, ASTNode* index) {
+    ASTNode* node = (ASTNode*)malloc(sizeof(ASTNode));
+    node->type = NODE_INDEX;
+    node->data.index.target = target;
+    node->data.index.index = index;
+    return node;
+}
+
 void append_argument(ASTNode* call_node, ASTNode* arg) {
     if (!call_node || call_node->type != NODE_FUNCTION_CALL || !arg) return;
     int index = call_node->data.call.arg_count++;
@@ -148,6 +156,12 @@ ASTNode* create_print_node(ASTNode* target) {
 void free_value(Value val) {
     if (val.type == VAL_STRING && val.as.s_val != NULL) {
         free(val.as.s_val);
+    }
+    if (val.type == VAL_ARRAY) {
+        for (int i = 0; i < val.as.array.count; i++) {
+            free_value(val.as.array.elements[i]);
+        }
+        free(val.as.array.elements);
     }
 }
 
@@ -211,6 +225,11 @@ void free_ast_node(ASTNode* node) {
                 free_ast_node(node->data.call.arguments[i]);
             }
             free(node->data.call.arguments);
+            break;
+
+      case NODE_INDEX:
+            free_ast_node(node->data.index.target);
+            free_ast_node(node->data.index.index);
             break;
 
     }
