@@ -132,5 +132,18 @@ ASTNode* create_print_node(ASTNode* target);
 // Deep Garbage Collection
 void free_ast_node(ASTNode* node);
 void free_value(Value val);
+/* =========================================================================
+   ADDITIONS TO ast.h
+   ========================================================================= */
+
+// A variable entry in our environment chain
+typedef struct Environment {
+    const char* name;
+    Value value;
+    struct Environment* outer; // Link to parent scope (null if global)
+} Environment;
+
+// Main entry point for the VM engine
+Value execute_ast(ASTNode* node, Environment* env);
 
 #endif // AST_H
