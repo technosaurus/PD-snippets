@@ -48,7 +48,7 @@ sqrtv:
 ```sh
 # FOR COMPACT UTILITIES (MAXIMUM STORAGE SAVINGS)
 clang -Oz -flto=thin -ffunction-sections -fdata-sections \
-      -mllvm -enable-gvn-hoist=1 -mllvm -enable-gvn-sink=1 \
+      -mllvm -enable-gvn-hoist=1 -mllvm -enable-gvn-sink=1 -enable-machine-outliner=always \
       -mllvm -inline-threshold=5 -fno-ident \
       -Wl,--gc-sections -Wl,--icf=all input.c -o output
 
