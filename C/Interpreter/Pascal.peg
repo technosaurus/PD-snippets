@@ -1,0 +1,84 @@
+%prefix "pascal"
+
+%header {
+    #include "ast.h"
+    #define PCC_GETCHAR(aux) pascal_get_next_char(aux)
+}
+
+%source {
+    static int pascal_get_next_char(void* aux) {
+        const char** src_ptr = (const char**)aux;
+        if (**src_ptr == '\0') return -1;
+        return (int)(*(*src_ptr)++);
+    }
+}
+
+# --- Parsing Rules ---
+
+# A Pascal streaming program maps to our dual-root initialization and loop body
+Program    <- _ init:InitBlock? _ body:CompoundStmt _ '.'? _ {
+                $$ = create_program_root(init, body);
+              }
+
+# Custom Pascal block extension for our line-by-line initialization hook
+InitBlock  <- "init" _ body:CompoundStmt _ ';'? { $$ = body; }
+
+CompoundStmt <- "begin" _ list:StmtList _ "end" { $$ = list; }
+
+StmtList   <- first:Stmt rest:(_ ';'_ Stmt)* ';'? {
+                ASTNode* block = create_block_node();
+                append_to_block(block, first);
+                for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                    append_to_block(block, pcc_get_value(rest, i));
+                }
+                $$ = block;
+              }
+
+Stmt       <- AssignStmt
+            / IfStmt
+            / WhileStmt
+            / PrintStmt
+            / CompoundStmt
+            / Expr
+
+# Pascal explicit assignment operator ':='
+AssignStmt <- id:Ident _ ":=" _ expr:Expr {
+                $$ = create_assignment_node(id->data.id_name, expr);
+                free(id->data.id_name); free(id);
+              }
+
+# Pascal conditional syntax: if condition then begin ... end
+IfStmt     <- "if" _ Cond:Expr _ "then" _ Then:CompoundStmt ElseStat:(_ "else" _ CompoundStmt)? {
+                ASTNode* else_branch = (ElseStat != NULL) ? ElseStat : NULL;
+                $$ = create_if_node(Cond, Then, else_branch);
+              }
+
+# Pascal iteration syntax: while condition do begin ... end
+WhileStmt  <- "while" _ Cond:Expr _ "do" _ Body:CompoundStmt {
+                $$ = create_while_node(Cond, Body);
+              }
+
+PrintStmt  <- "print" _ "(" _ target:Expr _ ")" {
+                $$ = create_print_node(target);
+              }
+
+Expr       <- ComparisonExpr
+
+ComparisonExpr 
+           <- left:MathExpr _ "<" _ right:ComparisonExpr { $$ = create_binary_node('<', left, right); }
+            / left:MathExpr _ ">" _ right:ComparisonExpr { $$ = create_binary_node('>', left, right); }
+            / left:MathExpr _ "=" _ right:ComparisonExpr { $$ = create_binary_node('=', left, right); } // Pascal uses single '=' for equality comparison
+            / MathExpr
+
+MathExpr   <- left:Term _ '+' _ right:MathExpr { $$ = create_binary_node('+', left, right); }
+            / left:MathExpr _ '-' _ right:MathExpr { $$ = create_binary_node('-', left, right); }
+            / Term
+
+Term       <- val:< [0-9]+ > { Value v = { VAL_INT, .as.i_val = atoi(val) }; $$ = create_literal_node(v); }
+            / '"' text:< [^"\\]* > '"' { Value v = { VAL_STRING, .as.s_val = (char*)text }; $$ = create_literal_node(v); }
+            / Ident
+
+Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > { $$ = create_identifier_node(name); }
+
+_          <- [ \t\n\r]* ( "(*" (!"*)" .)* "*)" _ )* # Supports standard Pascal (* block *) comments
+%%
