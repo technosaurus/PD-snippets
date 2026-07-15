@@ -21,7 +21,9 @@ Program    <- _ init:InitBlock? _ body:StmtList _ {
               }
 
 # Custom block definition to hook into our line-by-line initialization vector
-InitBlock  <- "INIT" _ TermStoppers _ body:StmtList _ "END INIT" _ TermStoppers? { $$ = body; }
+InitBlock  <- "INIT" _ TermStoppers _ body:StmtList _ "END" _ "INIT" _ TermStoppers? { 
+                $$ = body; 
+              }
 
 StmtList   <- first:Stmt rest:(_ TermStoppers _ Stmt)* _ TermStoppers? {
                 ASTNode* block = create_block_node();
@@ -35,6 +37,7 @@ StmtList   <- first:Stmt rest:(_ TermStoppers _ Stmt)* _ TermStoppers? {
 Stmt       <- AssignStmt
             / IfStmt
             / WhileStmt
+            / ForStmt
             / PrintStmt
             / Expr
 
@@ -44,39 +47,107 @@ AssignStmt <- "LET"? _ id:Ident _ '=' _ expr:Expr {
                 free(id->data.id_name); free(id);
               }
 
-# BASIC Conditional syntax: IF cond THEN \n body \n END IF
-IfStmt     <- "IF" _ Cond:Expr _ "THEN" _ TermStoppers _ Then:StmtList ElseStat:(_ "ELSE" _ TermStoppers _ StmtList)? _ "END" _ "IF" {
-                ASTNode* else_branch = (ElseStat != NULL) ? ElseStat : NULL;
-                $$ = create_if_node(Cond, Then, else_branch);
+# BASIC Conditional syntax: IF cond THEN \n body \n [ELSE \n body \n] END IF
+IfStmt     <- "IF" _ cond:Expr _ "THEN" _ TermStoppers _ then_body:StmtList 
+              else_body:(_ "ELSE" _ TermStoppers _ StmtList)? _ "END" _ "IF" {
+                ASTNode* else_stmt = NULL;
+                if (else_body != NULL) {
+                    else_stmt = (ASTNode*)pcc_get_value(else_body, 0);
+                }
+                $$ = create_if_node(cond, then_body, else_stmt);
+              }
+
+# BASIC Classic Iteration: FOR var = start TO end [STEP increment] \n body \n NEXT
+ForStmt    <- "FOR" _ id:Ident _ '=' _ start:Expr _ "TO" _ end:Expr 
+              step:(_ "STEP" _ Expr)? _ TermStoppers _ body:StmtList _ "NEXT" {
+                ASTNode* step_expr = NULL;
+                if (step != NULL) {
+                    step_expr = (ASTNode*)pcc_get_value(step, 0);
+                }
+                $$ = create_for_node(id->data.id_name, start, end, step_expr, body);
+                free(id->data.id_name); free(id);
               }
 
 # BASIC Classic Iteration: WHILE cond \n body \n WEND
-WhileStmt  <- "WHILE" _ Cond:Expr _ TermStoppers _ Body:StmtList _ "WEND" {
-                $$ = create_while_node(Cond, Body);
+WhileStmt  <- "WHILE" _ cond:Expr _ TermStoppers _ body:StmtList _ "WEND" {
+                $$ = create_while_node(cond, body);
               }
 
 PrintStmt  <- "PRINT" _ target:Expr {
                 $$ = create_print_node(target);
               }
 
-Expr       <- ComparisonExpr
+# ===== EXPRESSION PARSING =====
+# Precedence (lowest to highest):
+# 1. Comparison (< > == != <= >=)
+# 2. Logical OR
+# 3. Logical AND
+# 4. Addition/Subtraction
+# 5. Multiplication/Division/Modulo
+# 6. Unary +/- and NOT
+# 7. Exponentiation
+# 8. Primary (literals, identifiers, parentheses)
 
-ComparisonExpr 
-           <- left:MathExpr _ "<" _ right:ComparisonExpr { $$ = create_binary_node('<', left, right); }
-            / left:MathExpr _ ">" _ right:ComparisonExpr { $$ = create_binary_node('>', left, right); }
-            / left:MathExpr _ "==" _ right:ComparisonExpr { $$ = create_binary_node('=', left, right); }
-            / MathExpr
+Expr              <- ComparisonExpr
 
-MathExpr   <- left:Term _ '+' _ right:MathExpr { $$ = create_binary_node('+', left, right); }
-            / left:MathExpr _ '-' _ right:MathExpr { $$ = create_binary_node('-', left, right); }
-            / Term
+ComparisonExpr    <- left:LogicalOrExpr _ op:("<=" / ">=" / "==" / "!=" / "<" / ">") _ right:ComparisonExpr {
+                      $$ = create_binary_node(op[0], left, right);
+                    }
+                   / LogicalOrExpr
 
-Term       <- val:< [0-9]+ > { Value v = { VAL_INT, .as.i_val = atoi(val) }; $$ = create_literal_node(v); }
-            / '"' text:< [^"\\]* > '"' { Value v = { VAL_STRING, .as.s_val = (char*)text }; $$ = create_literal_node(v); }
-            / Ident
+LogicalOrExpr     <- left:LogicalAndExpr (_ "OR" _ right:LogicalAndExpr {
+                      $$ = create_binary_node('|', $$, right);
+                    })*
 
-Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > { $$ = create_identifier_node(name); }
+LogicalAndExpr    <- left:AddExpr (_ "AND" _ right:AddExpr {
+                      $$ = create_binary_node('&', $$, right);
+                    })*
 
-_          <- [ \t]* ( ("REM" / "'") [^\n]* [\n] _ )* # Supports both classic REM and modern apostrophe comments
-TermStoppers <- [\n\r;]+
+AddExpr           <- left:MulExpr (_ op:('+' / '-') _ right:MulExpr {
+                      $$ = create_binary_node(op[0], $$, right);
+                    })*
+
+MulExpr           <- left:ExpExpr (_ op:('*' / '/' / '%') _ right:ExpExpr {
+                      $$ = create_binary_node(op[0], $$, right);
+                    })*
+
+ExpExpr           <- left:UnaryExpr (_ '^' _ right:ExpExpr {
+                      $$ = create_binary_node('^', left, right);
+                    })?
+
+UnaryExpr         <- op:('+' / '-' / "NOT") _ right:UnaryExpr {
+                      $$ = create_unary_node(op[0], right);
+                    }
+                   / Primary
+
+Primary           <- '(' _ expr:Expr _ ')' { 
+                      $$ = expr; 
+                    }
+                   / IntegerLiteral
+                   / StringLiteral
+                   / Ident
+
+IntegerLiteral    <- val:< [0-9]+ > {
+                      Value v = { VAL_INT, .as.i_val = atoi(val) };
+                      $$ = create_literal_node(v);
+                    }
+
+StringLiteral     <- '"' text:< ( '\\' . / [^"\\] )* > '"' {
+                      Value v = { VAL_STRING, .as.s_val = (char*)text };
+                      $$ = create_literal_node(v);
+                    }
+
+Ident             <- name:< [a-zA-Z_][a-zA-Z0-9_]* > {
+                      $$ = create_identifier_node(name);
+                    }
+
+# Whitespace and comments
+_                 <- ( Whitespace / Comment )*
+
+Whitespace        <- [ \t\n\r]+
+
+Comment           <- ( "REM" / "'" ) [^\n]* [\n]?
+
+TermStoppers      <- [\n\r;]+
+
 %%
