@@ -2,6 +2,8 @@
 
 %header {
     #include "ast.h"
+    #include <string.h>
+    #include <stdlib.h>
     #define PCC_GETCHAR(aux) tcl_get_next_char(aux)
 }
 
@@ -10,6 +12,16 @@
         const char** src_ptr = (const char**)aux;
         if (**src_ptr == '\0') return -1;
         return (int)(*(*src_ptr)++);
+    }
+    
+    /* Helper to safely copy and null-terminate strings from PEG captures */
+    static char* safe_string_copy(const char* src, int len) {
+        char* dest = (char*)malloc(len + 1);
+        if (dest) {
+            strncpy(dest, src, len);
+            dest[len] = '\0';
+        }
+        return dest;
     }
 }
 
@@ -73,60 +85,60 @@ Expr       <- '[' _ "expr" _ body:ComparisonExpr _ ']' { $$ = body; }
 
 # Comparison operators - left-associative chains
 ComparisonExpr 
-           <- left:AddExpr rest:(_ CompOp _ AddExpr)* {
-                if (pcc_get_value_count(rest) == 0) {
-                    $$ = left;
-                } else {
-                    ASTNode* node = left;
-                    for(int i = 0; i < pcc_get_value_count(rest); i++) {
-                        /* Extract operator and right operand from rest[i] */
-                        node = pcc_get_value(rest, i);
-                    }
-                    $$ = node;
+           <- left:AddExpr rest:ComparisonRest* {
+                ASTNode* node = left;
+                for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                    pcc_value_t item = pcc_get_value(rest, i);
+                    char op = (intptr_t)item.a;
+                    ASTNode* right = (ASTNode*)item.b;
+                    node = create_binary_node(op, node, right);
                 }
+                $$ = node;
               }
 
-CompOp     <- "<" { $$ = (void*)'<'; }
-            / ">" { $$ = (void*)'>'; }
-            / "==" { $$ = (void*)'='; }
-            / "!=" { $$ = (void*)'!'; }
-            / "<=" { $$ = (void*)'L'; }
-            / ">=" { $$ = (void*)'G'; }
+ComparisonRest <- _ op:CompOp _ right:AddExpr { $$.a = op; $$.b = (void*)right; }
+
+CompOp     <- "==" { $$ = (void*)(intptr_t)'='; }
+            / "!=" { $$ = (void*)(intptr_t)'N'; }
+            / "<=" { $$ = (void*)(intptr_t)'L'; }
+            / ">=" { $$ = (void*)(intptr_t)'G'; }
+            / "<" { $$ = (void*)(intptr_t)'<'; }
+            / ">" { $$ = (void*)(intptr_t)'>'; }
 
 # Addition/Subtraction - left-associative
-AddExpr    <- left:MulExpr rest:(_ AddOp _ MulExpr)* {
-                if (pcc_get_value_count(rest) == 0) {
-                    $$ = left;
-                } else {
-                    ASTNode* node = left;
-                    for(int i = 0; i < pcc_get_value_count(rest); i++) {
-                        /* Process addition/subtraction chain */
-                        node = pcc_get_value(rest, i);
-                    }
-                    $$ = node;
+AddExpr    <- left:MulExpr rest:AddRest* {
+                ASTNode* node = left;
+                for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                    pcc_value_t item = pcc_get_value(rest, i);
+                    char op = (intptr_t)item.a;
+                    ASTNode* right = (ASTNode*)item.b;
+                    node = create_binary_node(op, node, right);
                 }
+                $$ = node;
               }
 
-AddOp      <- '+' { $$ = (void*)'+'; }
-            / '-' { $$ = (void*)'-'; }
+AddRest    <- _ op:AddOp _ right:MulExpr { $$.a = op; $$.b = (void*)right; }
+
+AddOp      <- '+' { $$ = (void*)(intptr_t)'+'; }
+            / '-' { $$ = (void*)(intptr_t)'-'; }
 
 # Multiplication/Division - left-associative
-MulExpr    <- left:UnaryExpr rest:(_ MulOp _ UnaryExpr)* {
-                if (pcc_get_value_count(rest) == 0) {
-                    $$ = left;
-                } else {
-                    ASTNode* node = left;
-                    for(int i = 0; i < pcc_get_value_count(rest); i++) {
-                        /* Process multiplication/division chain */
-                        node = pcc_get_value(rest, i);
-                    }
-                    $$ = node;
+MulExpr    <- left:UnaryExpr rest:MulRest* {
+                ASTNode* node = left;
+                for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                    pcc_value_t item = pcc_get_value(rest, i);
+                    char op = (intptr_t)item.a;
+                    ASTNode* right = (ASTNode*)item.b;
+                    node = create_binary_node(op, node, right);
                 }
+                $$ = node;
               }
 
-MulOp      <- '*' { $$ = (void*)'*'; }
-            / '/' { $$ = (void*)'/'; }
-            / '%' { $$ = (void*)'%'; }
+MulRest    <- _ op:MulOp _ right:UnaryExpr { $$.a = op; $$.b = (void*)right; }
+
+MulOp      <- '*' { $$ = (void*)(intptr_t)'*'; }
+            / '/' { $$ = (void*)(intptr_t)'/'; }
+            / '%' { $$ = (void*)(intptr_t)'%'; }
 
 # Unary operators (logical NOT, negation)
 UnaryExpr  <- '!' _ expr:UnaryExpr { $$ = create_unary_node('!', expr); }
@@ -136,25 +148,47 @@ UnaryExpr  <- '!' _ expr:UnaryExpr { $$ = create_unary_node('!', expr); }
 # In Tcl, raw strings are variables if prefixed with a $, or literals if standalone/quoted
 Term       <- '(' _ expr:Expr _ ')' { $$ = expr; }
             / '$' name:Ident { $$ = name; }
-            / val:< [0-9]+ ('.' [0-9]+)? > { 
-                if (strchr(val, '.')) {
-                    Value v = { VAL_FLOAT, .as.f_val = atof(val) }; 
-                    $$ = create_literal_node(v);
-                } else {
-                    Value v = { VAL_INT, .as.i_val = atoi(val) }; 
-                    $$ = create_literal_node(v);
-                }
-              }
-            / '"' text:< (EscapeSeq / [^"\\])* > '"' { 
-                Value v = { VAL_STRING, .as.s_val = (char*)text }; 
-                $$ = create_literal_node(v); 
-              }
-            / '\'' text:< [^']* > '\'' { 
-                Value v = { VAL_STRING, .as.s_val = (char*)text }; 
-                $$ = create_literal_node(v); 
+            / IntLiteral
+            / DoubleLiteral
+            / StringLiteral
+            / SingleQuotedString
+
+# Integer literal: 42, 0, -5 (handled by UnaryExpr)
+IntLiteral <- val:< [0-9]+ > { 
+                Value v = { VAL_INT, .as.i_val = atoi(val) }; 
+                $$ = create_literal_node(v);
               }
 
-EscapeSeq  <- '\\' ( '"' / '\\' / 'n' / 't' / 'r' )
+# Floating point literal: 3.14, 0.5
+DoubleLiteral <- val:< [0-9]+ '.' [0-9]+ > {
+                Value v = { VAL_FLOAT, .as.f_val = atof(val) }; 
+                $$ = create_literal_node(v);
+              }
+
+# Double-quoted string with escape sequence support
+StringLiteral <- '"' text:StringContent '"' {
+                Value v = { VAL_STRING, .as.s_val = (char*)text }; 
+                $$ = create_literal_node(v);
+              }
+
+StringContent <- content:< (EscapeSeq / [^"\\])* > {
+                /* Safe string copy to ensure null termination */
+                $$ = (void*)safe_string_copy(content, strlen(content));
+              }
+
+# Single-quoted strings (no escapes)
+SingleQuotedString <- '\'' text:< [^']* > '\'' {
+                char* str = safe_string_copy(text, strlen(text));
+                Value v = { VAL_STRING, .as.s_val = str }; 
+                $$ = create_literal_node(v);
+              }
+
+EscapeSeq  <- '\\' ( '"' { $$ = "\""; }
+                   / '\\' { $$ = "\\"; }
+                   / 'n' { $$ = "\n"; }
+                   / 't' { $$ = "\t"; }
+                   / 'r' { $$ = "\r"; }
+                   )
 
 Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > { $$ = create_identifier_node(name); }
 
