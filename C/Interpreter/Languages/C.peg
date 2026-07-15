@@ -87,9 +87,17 @@ Expr       <- left:Term _ '+' _ right:Expr { $$ = create_binary_node('+', left, 
             / Term
 
 Expr       <- ComparisonExpr
+Expr       <- LogicalOrExpr
+
+LogicalOrExpr  <- left:LogicalAndExpr _ "||" _ right:LogicalOrExpr { $$ = create_logical_node("or", left, right); }
+                / LogicalAndExpr
+
+LogicalAndExpr <- left:ComparisonExpr _ "&&" _ right:LogicalAndExpr { $$ = create_logical_node("and", left, right); }
+                / ComparisonExpr
 
 ComparisonExpr 
-           <- left:MathExpr _ "<" _ right:ComparisonExpr { $$ = create_binary_node('<', left, right); }
+           <- "!" _ operand:MathExpr { $$ = create_unary_node('!', operand); }
+            / left:MathExpr _ "<" _ right:ComparisonExpr { $$ = create_binary_node('<', left, right); }
             / left:MathExpr _ ">" _ right:ComparisonExpr { $$ = create_binary_node('>', left, right); }
             / left:MathExpr _ "==" _ right:ComparisonExpr { $$ = create_binary_node('=', left, right); }
             / MathExpr
@@ -98,7 +106,8 @@ MathExpr   <- left:Term _ '+' _ right:MathExpr { $$ = create_binary_node('+', le
             / left:MathExpr _ '-' _ right:MathExpr { $$ = create_binary_node('-', left, right); }
             / Term
 
-Term       <- name:Ident _ "(" _ args:ArgRegList? _ ")" {
+Term       <- str:StringLiteral { $$ = str; }
+            / name:Ident _ "(" _ args:ArgRegList? _ ")" {
                 ASTNode* call = create_call_node(name->data.id_name);
                 int count = pcc_get_value_count(args);
                 for(int i = 0; i < count; i++) {
@@ -109,6 +118,11 @@ Term       <- name:Ident _ "(" _ args:ArgRegList? _ ")" {
               }
             / val:< [0-9]+ > { Value v = { VAL_INT, .as.i_val = atoi(val) }; $$ = create_literal_node(v); }
             / Ident
+
+StringLiteral <- '"' text:< [^"\\]* > '"' {
+                Value v = { VAL_STRING, .as.s_val = (char*)text };
+                $$ = create_literal_node(v);
+               }
 
 ArgRegList <- first:Expr rest:(_ "," _ Expr)* { $$ = first; }
 
