@@ -15,7 +15,13 @@
 
 # --- Parsing Rules ---
 
-Program    <- _ blocks:BlockList _ { $$ = blocks; }
+#Program    <- _ blocks:BlockList _ { $$ = blocks; }
+Program    <- init:BeginBlock? _ body:BlockList {
+                $$ = create_program_root(init, body);
+              }
+              / _ blocks:BlockList _ { $$ = blocks; }
+
+BeginBlock <- "BEGIN" _ "{" _ list:ActionList _ "}" { $$ = list
 
 BlockList  <- first:PatternAction rest:(_ PatternAction)* {
                 ASTNode* block = create_block_node();
