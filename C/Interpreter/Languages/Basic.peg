@@ -1,0 +1,82 @@
+%prefix "basic"
+
+%header {
+    #include "ast.h"
+    #define PCC_GETCHAR(aux) basic_get_next_char(aux)
+}
+
+%source {
+    static int basic_get_next_char(void* aux) {
+        const char** src_ptr = (const char**)aux;
+        if (**src_ptr == '\0') return -1;
+        return (int)(*(*src_ptr)++);
+    }
+}
+
+# --- Parsing Rules ---
+
+# A BASIC streaming program maps directly to your dual-root setup
+Program    <- _ init:InitBlock? _ body:StmtList _ {
+                $$ = create_program_root(init, body);
+              }
+
+# Custom block definition to hook into our line-by-line initialization vector
+InitBlock  <- "INIT" _ TermStoppers _ body:StmtList _ "END INIT" _ TermStoppers? { $$ = body; }
+
+StmtList   <- first:Stmt rest:(_ TermStoppers _ Stmt)* _ TermStoppers? {
+                ASTNode* block = create_block_node();
+                append_to_block(block, first);
+                for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                    append_to_block(block, pcc_get_value(rest, i));
+                }
+                $$ = block;
+              }
+
+Stmt       <- AssignStmt
+            / IfStmt
+            / WhileStmt
+            / PrintStmt
+            / Expr
+
+# Supports both traditional "LET X = 5" and modern "X = 5"
+AssignStmt <- "LET"? _ id:Ident _ '=' _ expr:Expr {
+                $$ = create_assignment_node(id->data.id_name, expr);
+                free(id->data.id_name); free(id);
+              }
+
+# BASIC Conditional syntax: IF cond THEN \n body \n END IF
+IfStmt     <- "IF" _ Cond:Expr _ "THEN" _ TermStoppers _ Then:StmtList ElseStat:(_ "ELSE" _ TermStoppers _ StmtList)? _ "END" _ "IF" {
+                ASTNode* else_branch = (ElseStat != NULL) ? ElseStat : NULL;
+                $$ = create_if_node(Cond, Then, else_branch);
+              }
+
+# BASIC Classic Iteration: WHILE cond \n body \n WEND
+WhileStmt  <- "WHILE" _ Cond:Expr _ TermStoppers _ Body:StmtList _ "WEND" {
+                $$ = create_while_node(Cond, Body);
+              }
+
+PrintStmt  <- "PRINT" _ target:Expr {
+                $$ = create_print_node(target);
+              }
+
+Expr       <- ComparisonExpr
+
+ComparisonExpr 
+           <- left:MathExpr _ "<" _ right:ComparisonExpr { $$ = create_binary_node('<', left, right); }
+            / left:MathExpr _ ">" _ right:ComparisonExpr { $$ = create_binary_node('>', left, right); }
+            / left:MathExpr _ "==" _ right:ComparisonExpr { $$ = create_binary_node('=', left, right); }
+            / MathExpr
+
+MathExpr   <- left:Term _ '+' _ right:MathExpr { $$ = create_binary_node('+', left, right); }
+            / left:MathExpr _ '-' _ right:MathExpr { $$ = create_binary_node('-', left, right); }
+            / Term
+
+Term       <- val:< [0-9]+ > { Value v = { VAL_INT, .as.i_val = atoi(val) }; $$ = create_literal_node(v); }
+            / '"' text:< [^"\\]* > '"' { Value v = { VAL_STRING, .as.s_val = (char*)text }; $$ = create_literal_node(v); }
+            / Ident
+
+Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > { $$ = create_identifier_node(name); }
+
+_          <- [ \t]* ( ("REM" / "'") [^\n]* [\n] _ )* # Supports both classic REM and modern apostrophe comments
+TermStoppers <- [\n\r;]+
+%%
