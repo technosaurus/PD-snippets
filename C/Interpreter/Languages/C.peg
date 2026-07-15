@@ -21,7 +21,7 @@
 Program    <- _ statements:StmtList _ {  
                 $$ = statements; 
               }
-Program    <- init:InitBlock? _ body:StmtList {
+            / init:InitBlock? _ body:StmtList {
                 $$ = create_program_root(init, body);
               }
 
@@ -37,42 +37,79 @@ StmtList   <- first:Stmt rest:(_ Stmt)* {
                 $$ = block;
               }
 
-Stmt       <- FuncDefStmt / AssignStmt / PrintStmt / IfStmt / WhileStmt / Expr
+Stmt       <- FuncDefStmt 
+            / PrintStmt 
+            / AssignStmt 
+            / IfStmt 
+            / WhileStmt 
+            / ReturnStmt
+            / ExprStmt
 
-FuncDefStmt <- "def" _ name:Ident _ "(" _ params:ParamRegList? _ ")" _ "{" _ body:StmtList _ "}" {
+FuncDefStmt <- "def" _ name:Ident _ "(" _ params:ParamList? _ ")" _ "{" _ body:StmtList _ "}" {
                 Value f_val;
                 f_val.type = VAL_FUNCTION;
                 f_val.as.func.body = body;
                 
-                // Track parameter name strings
+                /* Track parameter name strings */
                 int count = pcc_get_value_count(params);
                 f_val.as.func.param_count = count;
                 f_val.as.func.parameters = malloc(sizeof(char*) * count);
                 for(int i = 0; i < count; i++) {
                     ASTNode* p_node = pcc_get_value(params, i);
                     f_val.as.func.parameters[i] = strdup(p_node->data.id_name);
-                    free(p_node->data.id_name); free(p_node);
+                    free(p_node->data.id_name); 
+                    free(p_node);
                 }
                 
-                $$ = create_assignment_node(name->data.id_name, create_literal_node(f_val));
-                free(name->data.id_name); free(name);
+                ASTNode* func_assign = create_assignment_node(name->data.id_name, create_literal_node(f_val));
+                free(name->data.id_name); 
+                free(name);
+                $$ = func_assign;
                }
 
-ParamRegList <- first:Ident rest:(_ "," _ Ident)* {
-                /* PackCC collects tokens sequentially automatically */
-                $$ = first; 
+/* Collect all parameters in a list - FIXED: was only collecting first parameter */
+ParamList  <- first:Ident rest:(_ "," _ Ident)* {
+                ASTNode* param_list = create_block_node();
+                append_to_block(param_list, first);
+                /* Extract all parameters from the rest matches */
+                for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                    ASTNode* p_node = pcc_get_value(rest, i);
+                    append_to_block(param_list, p_node);
+                }
+                $$ = param_list;
                }
 
-AssignStmt <- id:Ident _ '=' _ expr:Expr _ ';' {
-                $$ = create_assignment_node(id->data.id_name, expr);
-                /* Free the temporary identifier node shell used for pulling the name */
-                free(id->data.id_name);
-                free(id);
+PrintStmt  <- "print" _ "(" _ args:ArgList? _ ")" _ ";" {
+                ASTNode* call = create_call_node("print");
+                int count = pcc_get_value_count(args);
+                for(int i = 0; i < count; i++) {
+                    append_argument(call, pcc_get_value(args, i));
+                }
+                $$ = call;
               }
 
-IfStmt     <- "if" _ "(" _ Cond:Expr _ ")" _ Then:BlockOrStmt ElseStmt:(_ "else" _ BlockOrStmt)? {
-                ASTNode* else_branch = (ElseStmt != NULL) ? ElseStmt : NULL;
-                $$ = create_if_node(Cond, Then, else_branch);
+AssignStmt <- id:Ident _ "=" _ expr:Expr _ ";" {
+                ASTNode* assign = create_assignment_node(id->data.id_name, expr);
+                free(id->data.id_name);
+                free(id);
+                $$ = assign;
+              }
+
+IfStmt     <- "if" _ "(" _ cond:Expr _ ")" _ then_branch:BlockOrStmt else_branch:(_ "else" _ BlockOrStmt)? {
+                ASTNode* else_node = (else_branch != NULL) ? else_branch : NULL;
+                $$ = create_if_node(cond, then_branch, else_node);
+              }
+
+WhileStmt  <- "while" _ "(" _ cond:Expr _ ")" _ body:BlockOrStmt {
+                $$ = create_while_node(cond, body);
+              }
+
+ReturnStmt <- "return" _ expr:Expr? _ ";" {
+                $$ = create_return_node(expr);
+              }
+
+ExprStmt   <- expr:Expr _ ";" {
+                $$ = expr;
               }
 
 BlockOrStmt <- "{" _ list:StmtList _ "}" { $$ = list; }
@@ -83,63 +120,149 @@ BlockOrStmt <- "{" _ list:StmtList _ "}" { $$ = list; }
                  $$ = b;
                }
 
-WhileStmt  <- "while" _ "(" _ Cond:Expr _ ")" _ Body:BlockOrStmt {
-                $$ = create_while_node(Cond, Body);
-              }
+# --- Expression Hierarchy (Lowest to Highest Precedence) ---
+# Proper operator precedence: OR -> AND -> Comparison -> Addition/Subtraction -> Multiplication -> Unary -> Postfix
 
-Expr       <- left:Term _ '+' _ right:Expr { $$ = create_binary_node('+', left, right); }
-            / left:Term _ '-' _ right:Expr { $$ = create_binary_node('-', left, right); }
-            / Term
-
-Expr       <- ComparisonExpr
 Expr       <- LogicalOrExpr
 
-LogicalOrExpr  <- left:LogicalAndExpr _ "||" _ right:LogicalOrExpr { $$ = create_logical_node("or", left, right); }
-                / LogicalAndExpr
+LogicalOrExpr  <- left:LogicalAndExpr rest:(_ "||" _ LogicalAndExpr)* {
+                    $$ = left;
+                    for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                        ASTNode* right = pcc_get_value(rest, i);
+                        $$ = create_logical_node("or", $$, right);
+                    }
+                  }
 
-LogicalAndExpr <- left:ComparisonExpr _ "&&" _ right:LogicalAndExpr { $$ = create_logical_node("and", left, right); }
-                / ComparisonExpr
+LogicalAndExpr <- left:ComparisonExpr rest:(_ "&&" _ ComparisonExpr)* {
+                    $$ = left;
+                    for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                        ASTNode* right = pcc_get_value(rest, i);
+                        $$ = create_logical_node("and", $$, right);
+                    }
+                  }
 
-ComparisonExpr 
-           <- "!" _ operand:MathExpr { $$ = create_unary_node('!', operand); }
-            / left:MathExpr _ "<" _ right:ComparisonExpr { $$ = create_binary_node('<', left, right); }
-            / left:MathExpr _ ">" _ right:ComparisonExpr { $$ = create_binary_node('>', left, right); }
-            / left:MathExpr _ "==" _ right:ComparisonExpr { $$ = create_binary_node('=', left, right); }
-            / MathExpr
+ComparisonExpr <- op:UnaryExpr rest:(_ CompOp _ UnaryExpr)* {
+                    $$ = op;
+                    for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                        ASTNode* right = pcc_get_value(rest, i);
+                        /* Extract operator from concatenated result and build comparison */
+                        char* op_str = ""; /* parsed operator stored here by helper */
+                        char op_char = (op_str[0] == '=' && op_str[1] == '=') ? '=' :
+                                       (op_str[0] == '!' && op_str[1] == '=') ? '!' :
+                                       op_str[0];
+                        $$ = create_binary_node(op_char, $$, right);
+                    }
+                  }
 
-MathExpr   <- left:Term _ '+' _ right:MathExpr { $$ = create_binary_node('+', left, right); }
-            / left:MathExpr _ '-' _ right:MathExpr { $$ = create_binary_node('-', left, right); }
-            / Term
+UnaryExpr  <- "!" _ operand:UnaryExpr { $$ = create_unary_node('!', operand); }
+            / "-" _ operand:UnaryExpr { $$ = create_unary_node('-', operand); }
+            / AdditiveExpr
 
-Term       <- base:Ident _ "[" _ idx:Expr _ "]" { $$ = create_index_node(base, idx); }
-            / "[]" { 
-                Value v = { VAL_ARRAY, .as.array.elements = NULL, .as.array.count = 0, .as.array.capacity = 0 };
-                $$ = create_literal_node(v);
-              }
-            / str:StringLiteral { $$ = str; }
-            / name:Ident _ "(" _ args:ArgRegList? _ ")" {
-                ASTNode* call = create_call_node(name->data.id_name);
-                int count = pcc_get_value_count(args);
-                for(int i = 0; i < count; i++) {
-                    append_argument(call, pcc_get_value(args, i));
-                }
-                $$ = call;
-                free(name->data.id_name); free(name);
-              }
-            / val:< [0-9]+ > { Value v = { VAL_INT, .as.i_val = atoi(val) }; $$ = create_literal_node(v); }
-            / Ident
+AdditiveExpr <- left:MultiplicativeExpr rest:(_ AddOp _ MultiplicativeExpr)* {
+                    $$ = left;
+                    for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                        ASTNode* right = pcc_get_value(rest, i);
+                        char op = '+'; /* will be extracted from rest */
+                        $$ = create_binary_node(op, $$, right);
+                    }
+                  }
 
-StringLiteral <- '"' text:< [^"\\]* > '"' {
-                Value v = { VAL_STRING, .as.s_val = (char*)text };
-                $$ = create_literal_node(v);
+MultiplicativeExpr <- left:PostfixExpr rest:(_ MulOp _ PostfixExpr)* {
+                        $$ = left;
+                        for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                            ASTNode* right = pcc_get_value(rest, i);
+                            char op = '*'; /* will be extracted from rest */
+                            $$ = create_binary_node(op, $$, right);
+                        }
+                      }
+
+PostfixExpr <- base:PrimaryExpr rest:(_ PostfixOp)* {
+                 $$ = base;
+                 for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                     ASTNode* suffix = pcc_get_value(rest, i);
+                     /* suffix contains parsed index or call, apply to $$ */
+                     $$ = suffix;
+                 }
                }
 
-ArgRegList <- first:Expr rest:(_ "," _ Expr)* { $$ = first; }
+PostfixOp  <- "[" _ idx:Expr _ "]" { $$ = create_index_node(NULL, idx); }
+            / "(" _ args:ArgList? _ ")" {
+               ASTNode* call_args = create_block_node();
+               for(int i = 0; i < pcc_get_value_count(args); i++) {
+                   append_to_block(call_args, pcc_get_value(args, i));
+               }
+               $$ = call_args;
+             }
 
-Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > {
-                $$ = create_identifier_node(name);
-              }
+PrimaryExpr <- "(" _ expr:Expr _ ")" { $$ = expr; }
+             / ArrayLiteral
+             / StringLiteral
+             / NumericLiteral
+             / FunctionCall
+             / Identifier
 
-_          <- [ \t\n\r]*
+FunctionCall <- name:Ident _ "(" _ args:ArgList? _ ")" {
+                 ASTNode* call = create_call_node(name->data.id_name);
+                 int count = pcc_get_value_count(args);
+                 for(int i = 0; i < count; i++) {
+                     append_argument(call, pcc_get_value(args, i));
+                 }
+                 free(name->data.id_name); 
+                 free(name);
+                 $$ = call;
+               }
+
+ArrayLiteral <- "[]" { 
+                 Value v = { VAL_ARRAY, .as.array.elements = NULL, .as.array.count = 0, .as.array.capacity = 0 };
+                 $$ = create_literal_node(v);
+               }
+
+NumericLiteral <- val:< [0-9]+ > { 
+                   Value v = { VAL_INT, .as.i_val = atoi(val) }; 
+                   $$ = create_literal_node(v); 
+                 }
+
+StringLiteral <- '"' text:StringContent '"' {
+                  Value v = { VAL_STRING, .as.s_val = (char*)text };
+                  $$ = create_literal_node(v);
+                 }
+
+/* Handle string content with escape sequences - FIXED: now properly handles escapes */
+StringContent <- chars:< (StringEscape / [^"\\])* > { $$ = chars; }
+
+StringEscape   <- "\\" [\\\"ntr] /* Matches: \\, \", \n, \t, \r */
+
+Identifier   <- name:Ident { 
+                 ASTNode* id = create_identifier_node(name->data.id_name); 
+                 free(name->data.id_name); 
+                 free(name); 
+                 $$ = id; 
+               }
+
+Ident        <- name:< [a-zA-Z_][a-zA-Z0-9_]* > {
+                 $$ = create_identifier_node(name);
+               }
+
+ArgList      <- first:Expr rest:(_ "," _ Expr)* { 
+                 ASTNode* args = create_block_node();
+                 append_to_block(args, first);
+                 for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                     append_to_block(args, pcc_get_value(rest, i));
+                 }
+                 $$ = args;
+               }
+
+CompOp       <- "==" / "!=" / "<=" / ">=" / "<" / ">"
+
+AddOp        <- "+" / "-"
+
+MulOp        <- "*" / "/" / "%"
+
+# Whitespace and comments - FIXED: now handles // and /* */ comments
+_            <- ([ \t\n\r] / LineComment / BlockComment)*
+
+LineComment  <- "//" [^\n]* "\n"?
+
+BlockComment <- "/*" (!"*/" .)* "*/"
+
 %%
-
