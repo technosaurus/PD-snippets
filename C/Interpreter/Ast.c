@@ -27,6 +27,14 @@ static ASTNode* allocate_node(NodeType type) {
    2. FACTORY FUNCTIONS (CONSTRUCTORS)
    ========================================================================= */
 
+ASTNode* create_program_root(ASTNode* init, ASTNode* body) {
+    ASTNode* node = (ASTNode*)malloc(sizeof(ASTNode));
+    node->type = NODE_PROGRAM_ROOT;
+    node->data.root.init_block = init ? init : create_block_node();
+    node->data.root.body_block = body ? body : create_block_node();
+    return node;
+}
+
 ASTNode* create_literal_node(Value val) {
     ASTNode* node = allocate_node(NODE_LITERAL);
     node->data.literal = val;
@@ -230,6 +238,11 @@ void free_ast_node(ASTNode* node) {
       case NODE_INDEX:
             free_ast_node(node->data.index.target);
             free_ast_node(node->data.index.index);
+            break;
+
+      case NODE_PROGRAM_ROOT:
+            free_ast_node(node->data.root.init_block);
+            free_ast_node(node->data.root.body_block);
             break;
 
     }
