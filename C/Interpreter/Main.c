@@ -24,7 +24,7 @@ typedef struct awk_context_tag awk_context_t;
 awk_context_t* awk_create(void* user_data);
 int awk_parse(awk_context_t* ctx, ASTNode** result);
 void awk_destroy(awk_context_t* ctx);
-
+void execute_awk_stream(ASTNode* program_ast, Environment* global_env, const char* data_file_path);
 /* =========================================================================
    1. UTILITY: FILE LOADING INTERFACE
    ========================================================================= */
@@ -116,21 +116,15 @@ static ASTNode* run_awk_parser(const char* source) {
    3. THE MAIN PROGRAM ENTRY POINT
    ========================================================================= */
 int main(int argc, char* argv[]) {
+    // AWK requires an input data file target
     if (argc < 2) {
-        printf("Usage: polyglot_vm [file_path]\n");
+        printf("Usage: polyglot_vm [script_path] [optional_data_stream_path]\n");
         return EXIT_FAILURE;
     }
 
     const char* file_path = argv[1];
-    
-    // 1. Extract the file extension to pick our target language pipeline
     const char* ext = strrchr(file_path, '.');
-    if (!ext) {
-        fprintf(stderr, "Error: Files must include a valid language extension (e.g., .c, .scm).\n");
-        return EXIT_FAILURE;
-    }
-
-    // 2. Read the script text code straight into local memory strings
+    
     char* source_code = read_file(file_path);
     ASTNode* program_ast = NULL;
 
@@ -149,20 +143,32 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    // Check if the parser encountered syntactical blockers
     if (!program_ast) {
         fprintf(stderr, "Syntax Error: Code failed to compile into a clean AST.\n");
         free(source_code);
         return EXIT_FAILURE;
     }
 
-    // 4. Initialize the Global Virtual Machine Environment Frame
     Value null_val = { VAL_NULL, {0} };
     Environment global_env = { .name = "__global__", .value = null_val, .outer = NULL };
 
     // 5. Execute! This single loop handles whatever tree was generated upstream.
     printf("--- Executing Program (%s) ---\n", file_path);
-    Value execution_result = execute_ast(program_ast, &global_env);
+// Switch execution context paths if handling an AWK stream pipeline
+    if (strcmp(ext, ".awk") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "AWK Error: Missing input data file stream argument.\n");
+            free_ast_node(program_ast);
+            free(source_code);
+            return EXIT_FAILURE;
+        }
+        execute_awk_stream(program_ast, &global_env, argv[2]);
+    } else {
+        // Standard single-pass execution for TinyC, Lisp, and Lua
+        Value execution_result = execute_ast(program_ast, &global_env);
+        free_value(execution_result);
+    }
+    
     printf("-------------------------------\n");
 
     // 6. Deep Memory Garbage Cleanups
