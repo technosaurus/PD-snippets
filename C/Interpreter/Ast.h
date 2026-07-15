@@ -73,7 +73,7 @@ typedef enum {
 /* =========================================================================
    3. ABSTRACT SYNTAX TREE STRUCTURE
    ========================================================================= */
-typedef struct ASTNode { //todo reorder with enums
+typedef struct ASTNode {
     NodeType type;
     union {
         // NODE_LITERAL: Constant values (e.g., 42, "hello", true)
@@ -128,6 +128,7 @@ typedef struct ASTNode { //todo reorder with enums
             char* name;
             struct ASTNode** arguments; // Dynamic array of ASTNode expression trees
             int arg_count;
+            int arg_capacity;  // Capacity tracking for safe reallocation
         } call;
         struct {
             char* type_str; // "and" or "or"
@@ -185,7 +186,7 @@ ASTNode* create_index_node(ASTNode* target, ASTNode* index);
 
 // Deep Garbage Collection
 void free_ast_node(ASTNode* node);
-void free_value(Value val);
+void free_value(const Value val);
 /* =========================================================================
    ADDITIONS TO ast.h
    ========================================================================= */
