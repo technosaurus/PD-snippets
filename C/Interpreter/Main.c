@@ -20,6 +20,11 @@ lua_context_t* lua_create(void* user_data);
 int lua_parse(lua_context_t* ctx, ASTNode** result);
 void lua_destroy(lua_context_t* ctx);
 
+typedef struct awk_context_tag awk_context_t;
+awk_context_t* awk_create(void* user_data);
+int awk_parse(awk_context_t* ctx, ASTNode** result);
+void awk_destroy(awk_context_t* ctx);
+
 /* =========================================================================
    1. UTILITY: FILE LOADING INTERFACE
    ========================================================================= */
@@ -96,6 +101,17 @@ static ASTNode* run_lua_parser(const char* source) {
     return NULL;
 }
 
+static ASTNode* run_awk_parser(const char* source) {
+    ASTNode* root_node = NULL;
+    awk_context_t* ctx = awk_create((void*)source);
+    if (awk_parse(ctx, &root_node) != 0) {
+        awk_destroy(ctx);
+        return root_node;
+    }
+    awk_destroy(ctx);
+    return NULL;
+}
+
 /* =========================================================================
    3. THE MAIN PROGRAM ENTRY POINT
    ========================================================================= */
@@ -123,8 +139,10 @@ int main(int argc, char* argv[]) {
         program_ast = run_tinyc_parser(source_code);
     } else if (strcmp(ext, ".scm") == 0 || strcmp(ext, ".lisp") == 0) {
         program_ast = run_lisp_parser(source_code);
-    } else if (strcmp(ext, ".lua") == 0) { // <-- Added Lua Route
+    } else if (strcmp(ext, ".lua") == 0) {
         program_ast = run_lua_parser(source_code);
+    } else if (strcmp(ext, ".awk") == 0) { // <-- Added AWK Route
+        program_ast = run_awk_parser(source_code);
     } else {
         fprintf(stderr, "Error: Unsupported language target extension '%s'.\n", ext);
         free(source_code);
