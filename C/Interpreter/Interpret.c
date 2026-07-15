@@ -159,6 +159,39 @@ Value execute_ast(ASTNode* node, Environment* env) {
             return res;
         }
 
+        case NODE_UNARY_OP: {
+            Value operand = execute_ast(node->data.unary.operand, env);
+            Value res = null_val;
+            if (node->data.unary.op == '!') { // Logical NOT
+                res.type = VAL_BOOL;
+                res.as.b_val = !is_truthy(operand);
+            }
+            free_value(operand);
+            return res;
+        }
+
+        case NODE_LOGICAL_OP: {
+            Value left = execute_ast(node->data.logical.left, env);
+            bool left_truth = is_truthy(left);
+
+            if (strcmp(node->data.logical.type_str, "and") == 0) {
+                if (!left_truth) { 
+                    return left; // Short circuit: returns falsy left value
+                }
+                free_value(left);
+                return execute_ast(node->data.logical.right, env);
+            } 
+            else if (strcmp(node->data.logical.type_str, "or") == 0) {
+                if (left_truth) {
+                    return left; // Short circuit: returns truthy left value
+                }
+                free_value(left);
+                return execute_ast(node->data.logical.right, env);
+            }
+            free_value(left);
+            return null_val;
+        }
+
         case NODE_ASSIGNMENT: {
             Value val = execute_ast(node->data.assign.value, env);
             Environment* target = env_find(env, node->data.assign.name);
