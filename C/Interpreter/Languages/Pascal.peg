@@ -43,8 +43,13 @@ Stmt       <- AssignStmt
 
 # Pascal explicit assignment operator ':='
 AssignStmt <- id:Ident _ ":=" _ expr:Expr {
-                $$ = create_assignment_node(id->data.id_name, expr);
-                free(id->data.id_name); free(id);
+                if (id && expr && id->data.id_name) {
+                    $$ = create_assignment_node(id->data.id_name, expr);
+                    free(id->data.id_name);
+                    free(id);
+                } else {
+                    $$ = NULL;
+                }
               }
 
 # Pascal conditional syntax: if condition then begin ... end
@@ -62,23 +67,72 @@ PrintStmt  <- "print" _ "(" _ target:Expr _ ")" {
                 $$ = create_print_node(target);
               }
 
-Expr       <- ComparisonExpr
+# --- Expression Hierarchy (Operator Precedence) ---
+# From lowest to highest: Logical (or/and) -> Comparison -> Additive -> Multiplicative -> Unary -> Primary
+
+Expr       <- LogicalExpr
+
+LogicalExpr <- left:ComparisonExpr _ op:("or" / "and") _ right:LogicalExpr {
+                $$ = create_binary_node(op[0] == 'o' ? BINOP_OR : BINOP_AND, left, right);
+              }
+             / ComparisonExpr
 
 ComparisonExpr 
-           <- left:MathExpr _ "<" _ right:ComparisonExpr { $$ = create_binary_node('<', left, right); }
-            / left:MathExpr _ ">" _ right:ComparisonExpr { $$ = create_binary_node('>', left, right); }
-            / left:MathExpr _ "=" _ right:ComparisonExpr { $$ = create_binary_node('=', left, right); } // Pascal uses single '=' for equality comparison
-            / MathExpr
+           <- left:AdditiveExpr _ op:("<=" / ">=" / "<>" / "=" / "<" / ">") _ right:ComparisonExpr {
+                $$ = create_binary_node(op, left, right);
+              }
+            / AdditiveExpr
 
-MathExpr   <- left:Term _ '+' _ right:MathExpr { $$ = create_binary_node('+', left, right); }
-            / left:MathExpr _ '-' _ right:MathExpr { $$ = create_binary_node('-', left, right); }
-            / Term
+AdditiveExpr 
+           <- left:MultiplicativeExpr _ op:('+' / '-') _ right:AdditiveExpr {
+                $$ = create_binary_node(op, left, right);
+              }
+            / MultiplicativeExpr
 
-Term       <- val:< [0-9]+ > { Value v = { VAL_INT, .as.i_val = atoi(val) }; $$ = create_literal_node(v); }
-            / '"' text:< [^"\\]* > '"' { Value v = { VAL_STRING, .as.s_val = (char*)text }; $$ = create_literal_node(v); }
+MultiplicativeExpr 
+           <- left:UnaryExpr _ op:('*' / '/' / "mod") _ right:MultiplicativeExpr {
+                $$ = create_binary_node(op, left, right);
+              }
+            / UnaryExpr
+
+UnaryExpr  <- "not" _ expr:UnaryExpr { $$ = create_unary_node("not", expr); }
+            / PrimaryExpr
+
+PrimaryExpr 
+           <- '(' _ expr:Expr _ ')' { $$ = expr; }
+            / Number
+            / String
             / Ident
 
-Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > { $$ = create_identifier_node(name); }
+# Numeric literals with optional decimal and exponent support
+Number     <- val:< [0-9]+ ('.' [0-9]+)? ([eE] [+-]? [0-9]+)? > {
+                Value v;
+                if (strchr(val, '.') || strchr(val, 'e') || strchr(val, 'E')) {
+                    v.type = VAL_FLOAT;
+                    v.as.f_val = atof(val);
+                } else {
+                    v.type = VAL_INT;
+                    v.as.i_val = atoi(val);
+                }
+                $$ = create_literal_node(v);
+              }
 
-_          <- [ \t\n\r]* ( "(*" (!"*)" .)* "*)" _ )* # Supports standard Pascal (* block *) comments
+# String literals with escape sequence support
+String     <- '"' text:< ( '\\' . / [^"\\] )* > '"' {
+                Value v = { VAL_STRING, .as.s_val = (char*)text };
+                $$ = create_literal_node(v);
+              }
+
+Ident      <- !Keyword name:< [a-zA-Z_][a-zA-Z0-9_]* > {
+                $$ = create_identifier_node(name);
+              }
+
+# Keyword list to prevent identifiers from shadowing reserved words
+Keyword    <- ( "begin" / "end" / "if" / "then" / "else" / "while" / "do" 
+              / "print" / "init" / "and" / "or" / "not" / "mod" ) !< [a-zA-Z0-9_] >
+
+# Whitespace and comments
+# Handles spaces, tabs, newlines, and Pascal block comments (* ... *)
+_          <- ( [ \t\n\r] / "(*" (!"*)" .)* "*)" )*
+
 %%
