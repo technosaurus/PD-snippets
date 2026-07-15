@@ -15,6 +15,10 @@ lisp_context_t* lisp_create(void* user_data);
 int lisp_parse(lisp_context_t* ctx, ASTNode** result);
 void lisp_destroy(lisp_context_t* ctx);
 
+typedef struct lua_context_tag lua_context_t;
+lua_context_t* lua_create(void* user_data);
+int lua_parse(lua_context_t* ctx, ASTNode** result);
+void lua_destroy(lua_context_t* ctx);
 
 /* =========================================================================
    1. UTILITY: FILE LOADING INTERFACE
@@ -81,6 +85,16 @@ static ASTNode* run_lisp_parser(const char* source) {
     return NULL;
 }
 
+static ASTNode* run_lua_parser(const char* source) {
+    ASTNode* root_node = NULL;
+    lua_context_t* ctx = lua_create((void*)source);
+    if (lua_parse(ctx, &root_node) != 0) {
+        lua_destroy(ctx);
+        return root_node;
+    }
+    lua_destroy(ctx);
+    return NULL;
+}
 
 /* =========================================================================
    3. THE MAIN PROGRAM ENTRY POINT
@@ -109,6 +123,8 @@ int main(int argc, char* argv[]) {
         program_ast = run_tinyc_parser(source_code);
     } else if (strcmp(ext, ".scm") == 0 || strcmp(ext, ".lisp") == 0) {
         program_ast = run_lisp_parser(source_code);
+    } else if (strcmp(ext, ".lua") == 0) { // <-- Added Lua Route
+        program_ast = run_lua_parser(source_code);
     } else {
         fprintf(stderr, "Error: Unsupported language target extension '%s'.\n", ext);
         free(source_code);
