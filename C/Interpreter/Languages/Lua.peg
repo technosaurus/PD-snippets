@@ -67,6 +67,13 @@ FuncDef    <- "function" _ name:Ident _ "(" _ params:ParamList? _ ")" _ body:Chu
 ParamList  <- first:Ident rest:(_ "," _ Ident)* { $$ = first; }
 
 Expr       <- ComparisonExpr
+Expr       <- LogicalOrExpr
+
+LogicalOrExpr  <- left:LogicalAndExpr _ "or" _ right:LogicalOrExpr { $$ = create_logical_node("or", left, right); }
+                / LogicalAndExpr
+
+LogicalAndExpr <- left:ComparisonExpr _ "and" _ right:LogicalAndExpr { $$ = create_logical_node("and", left, right); }
+                / ComparisonExpr
 
 ComparisonExpr 
            <- left:MathExpr _ "<" _ right:ComparisonExpr { $$ = create_binary_node('<', left, right); }
@@ -78,7 +85,12 @@ MathExpr   <- left:Term _ '+' _ right:MathExpr { $$ = create_binary_node('+', le
             / left:MathExpr _ '-' _ right:MathExpr { $$ = create_binary_node('-', left, right); }
             / Term
 
-Term       <- "print" _ "(" _ arg:Expr _ ")" {
+Term       <- "not" _ operand:MathExpr { $$ = create_unary_node('!', operand); }
+            / '"' text:< [^"\\]* > '"' {
+                Value v = { VAL_STRING, .as.s_val = (char*)text };
+                $$ = create_literal_node(v);
+              }
+            / "print" _ "(" _ arg:Expr _ ")" {
                 $$ = create_print_node(arg);
               }
             / name:Ident _ "(" _ args:ArgList? _ ")" {
