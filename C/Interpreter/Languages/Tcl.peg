@@ -1,0 +1,85 @@
+%prefix "tcl"
+
+%header {
+    #include "ast.h"
+    #define PCC_GETCHAR(aux) tcl_get_next_char(aux)
+}
+
+%source {
+    static int tcl_get_next_char(void* aux) {
+        const char** src_ptr = (const char**)aux;
+        if (**src_ptr == '\0') return -1;
+        return (int)(*(*src_ptr)++);
+    }
+}
+
+# --- Parsing Rules ---
+
+Program    <- _ init:InitBlock? _ body:CmdList {
+                $$ = create_program_root(init, body);
+              }
+
+InitBlock  <- "init" _ '{' _ list:CmdList _ '}' _ ';'? { $$ = list; }
+
+CmdList    <- first:Cmd rest:(_ TermStoppers _ Cmd)* _ TermStoppers? {
+                ASTNode* block = create_block_node();
+                append_to_block(block, first);
+                for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                    append_to_block(block, pcc_get_value(rest, i));
+                }
+                $$ = block;
+              }
+
+Cmd        <- SetCmd
+            / IfCmd
+            / WhileCmd
+            / PrintCmd
+            / Expr
+
+# Tcl Variable Assignment: set x 10
+SetCmd     <- "set" _ id:Ident _ val:Expr {
+                $$ = create_assignment_node(id->data.id_name, val);
+                free(id->data.id_name); free(id);
+              }
+
+# Tcl Conditional: if { $x == 3 } { print $x }
+IfCmd      <- "if" _ '{' _ Cond:Expr _ '}' _ '{' _ Then:CmdList _ '}' ElseStat:(_ "else" _ '{' _ CmdList _ '}')? {
+                ASTNode* else_branch = (ElseStat != NULL) ? ElseStat : NULL;
+                $$ = create_if_node(Cond, Then, else_branch);
+              }
+
+# Tcl Iteration Loop: while { $x > 0 } { ... }
+WhileCmd   <- "while" _ '{' _ Cond:Expr _ '}' _ '{' _ Body:CmdList _ '}' {
+                $$ = create_while_node(Cond, Body);
+              }
+
+# Tcl Print: print $x
+PrintCmd   <- "print" _ target:Expr {
+                $$ = create_print_node(target);
+              }
+
+# Tcl Explicit Mathematical Evaluation: [expr $a + $b]
+# In Tcl, square brackets mean "evaluate this nested command first"
+Expr       <- '[' _ "expr" _ body:ComparisonExpr _ ']' { $$ = body; }
+            / ComparisonExpr
+
+ComparisonExpr 
+           <- left:MathExpr _ "<" _ right:ComparisonExpr { $$ = create_binary_node('<', left, right); }
+            / left:MathExpr _ ">" _ right:ComparisonExpr { $$ = create_binary_node('>', left, right); }
+            / left:MathExpr _ "==" _ right:ComparisonExpr { $$ = create_binary_node('=', left, right); }
+            / MathExpr
+
+MathExpr   <- left:Term _ '+' _ right:MathExpr { $$ = create_binary_node('+', left, right); }
+            / left:MathExpr _ '-' _ right:MathExpr { $$ = create_binary_node('-', left, right); }
+            / Term
+
+# In Tcl, raw strings are variables if prefixed with a $, or literals if standalone/quoted
+Term       <- '$' name:Ident { $$ = name; }
+            / val:< [0-9]+ > { Value v = { VAL_INT, .as.i_val = atoi(val) }; $$ = create_literal_node(v); }
+            / '"' text:< [^"\\]* > '"' { Value v = { VAL_STRING, .as.s_val = (char*)text }; $$ = create_literal_node(v); }
+
+Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > { $$ = create_identifier_node(name); }
+
+_          <- [ \t]* ( "#" [^\n]* [\n] _ )* # Supports standard Tcl hash comments
+TermStoppers <- [\n;]+
+%%
