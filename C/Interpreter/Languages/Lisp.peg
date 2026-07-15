@@ -38,6 +38,9 @@ SExpr      <- '+' _ left:Expr _ right:Expr { $$ = create_binary_node('+', left, 
                 ASTNode* else_branch = (Else != NULL) ? Else : NULL;
                 $$ = create_if_node(Cond, Then, else_branch);
               }
+            / "while" _ Cond:Expr _ Body:ExprList {
+                $$ = create_while_node(Cond, Body);
+              }
             / "define" _ id:Ident _ val:Expr {
                 $$ = create_assignment_node(id->data.id_name, val);
                 free(id->data.id_name);
