@@ -1,0 +1,101 @@
+%prefix "lua"
+
+%header {
+    #include "ast.h"
+    #define PCC_GETCHAR(aux) lua_get_next_char(aux)
+}
+
+%source {
+    static int lua_get_next_char(void* aux) {
+        const char** src_ptr = (const char**)aux;
+        if (**src_ptr == '\0') return -1;
+        return (int)(*(*src_ptr)++);
+    }
+}
+
+# --- Parsing Rules ---
+
+Program    <- _ statements:Chunk _ { $$ = statements; }
+
+Chunk      <- first:Stat rest:(_ Stat)* {
+                ASTNode* block = create_block_node();
+                append_to_block(block, first);
+                for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                    append_to_block(block, pcc_get_value(rest, i));
+                }
+                $$ = block;
+              }
+
+Stat       <- FuncDef
+            / IfStat
+            / WhileStat
+            / AssignStat
+            / Expr
+
+AssignStat <- id:Ident _ '=' _ expr:Expr {
+                $$ = create_assignment_node(id->data.id_name, expr);
+                free(id->data.id_name); free(id);
+              }
+
+IfStat     <- "if" _ Cond:Expr _ "then" _ Then:Chunk ElseStat:(_ "else" _ Chunk)? _ "end" {
+                ASTNode* else_branch = (ElseStat != NULL) ? ElseStat : NULL;
+                $$ = create_if_node(Cond, Then, else_branch);
+              }
+
+WhileStat  <- "while" _ Cond:Expr _ "do" _ Body:Chunk _ "end" {
+                $$ = create_while_node(Cond, Body);
+              }
+
+FuncDef    <- "function" _ name:Ident _ "(" _ params:ParamList? _ ")" _ body:Chunk _ "end" {
+                Value f_val;
+                f_val.type = VAL_FUNCTION;
+                f_val.as.func.body = body;
+                
+                int count = pcc_get_value_count(params);
+                f_val.as.func.param_count = count;
+                f_val.as.func.parameters = malloc(sizeof(char*) * count);
+                for(int i = 0; i < count; i++) {
+                    ASTNode* p_node = pcc_get_value(params, i);
+                    f_val.as.func.parameters[i] = strdup(p_node->data.id_name);
+                    free(p_node->data.id_name); free(p_node);
+                }
+                
+                $$ = create_assignment_node(name->data.id_name, create_literal_node(f_val));
+                free(name->data.id_name); free(name);
+              }
+
+ParamList  <- first:Ident rest:(_ "," _ Ident)* { $$ = first; }
+
+Expr       <- ComparisonExpr
+
+ComparisonExpr 
+           <- left:MathExpr _ "<" _ right:ComparisonExpr { $$ = create_binary_node('<', left, right); }
+            / left:MathExpr _ ">" _ right:ComparisonExpr { $$ = create_binary_node('>', left, right); }
+            / left:MathExpr _ "==" _ right:ComparisonExpr { $$ = create_binary_node('=', left, right); }
+            / MathExpr
+
+MathExpr   <- left:Term _ '+' _ right:MathExpr { $$ = create_binary_node('+', left, right); }
+            / left:MathExpr _ '-' _ right:MathExpr { $$ = create_binary_node('-', left, right); }
+            / Term
+
+Term       <- "print" _ "(" _ arg:Expr _ ")" {
+                $$ = create_print_node(arg);
+              }
+            / name:Ident _ "(" _ args:ArgList? _ ")" {
+                ASTNode* call = create_call_node(name->data.id_name);
+                int count = pcc_get_value_count(args);
+                for(int i = 0; i < count; i++) {
+                    append_argument(call, pcc_get_value(args, i));
+                }
+                $$ = call;
+                free(name->data.id_name); free(name);
+              }
+            / val:< [0-9]+ > { Value v = { VAL_INT, .as.i_val = atoi(val) }; $$ = create_literal_node(v); }
+            / Ident
+
+ArgList    <- first:Expr rest:(_ "," _ Expr)* { $$ = first; }
+
+Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > { $$ = create_identifier_node(name); }
+
+_          <- [ \t\n\r]* ( "--" [^\n]* [\n] _ )* # Includes support for Lua style comments
+%%
