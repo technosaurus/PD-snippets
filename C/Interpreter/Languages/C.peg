@@ -21,6 +21,11 @@
 Program    <- _ statements:StmtList _ {  
                 $$ = statements; 
               }
+Program    <- init:InitBlock? _ body:StmtList {
+                $$ = create_program_root(init, body);
+              }
+
+InitBlock  <- "init" _ "{" _ list:StmtList _ "}" { $$ = list; }
 
 StmtList   <- first:Stmt rest:(_ Stmt)* {
                 ASTNode* block = create_block_node();
