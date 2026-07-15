@@ -107,6 +107,49 @@ static Value eval_add(Value left, Value right) {
     return res;
 }
 
+// Explicit runner for stream-based architectures like AWK
+void execute_awk_stream(ASTNode* program_ast, Environment* global_env, const char* data_file_path) {
+    FILE* stream = fopen(data_file_path, "r");
+    if (!stream) {
+        fprintf(stderr, "Runtime Error: Could not open data stream file '%s'\n", data_file_path);
+        exit(EXIT_FAILURE);
+    }
+
+    char line_buffer[1024];
+    int line_number = 0;
+
+    // Initialize the line-counter environment variable frame
+    Value nr_val = { VAL_INT, .as.i_val = 0 };
+    Environment nr_env = { .name = "NR", .value = nr_val, .outer = global_env->outer };
+    global_env->outer = &nr_env; // Inject NR into the active lookup scope
+
+    // Also support $0 to reference the entire raw record line string
+    Value record_val = { VAL_STRING, .as.s_val = NULL };
+    Environment record_env = { .name = "record", .value = record_val, .outer = global_env->outer };
+    global_env->outer = &record_env;
+
+    // Stream Loop: Read line by line exactly like native AWK
+    while (fgets(line_buffer, sizeof(line_buffer), stream)) {
+        line_number++;
+        
+        // Strip trailing newline character
+        line_buffer[strcspn(line_buffer, "\n")] = 0;
+
+        // Update the automatic loop counter state variables
+        nr_env.value.as.i_val = line_number;
+        
+        if (record_env.value.as.s_val) free(record_env.value.as.s_val);
+        record_env.value.as.s_val = strdup(line_buffer);
+
+        // Execute the entire AST block against the updated line data context
+        Value iteration_result = execute_ast(program_ast, global_env);
+        free_value(iteration_result);
+    }
+
+    // Clean up data stream hooks
+    free(record_env.value.as.s_val);
+    fclose(stream);
+}
 
 /* =========================================================================
    3. THE MAIN AST VISITOR LOOP
