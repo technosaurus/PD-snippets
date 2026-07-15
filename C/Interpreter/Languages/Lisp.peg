@@ -19,6 +19,12 @@
 Program    <- _ expressions:ExprList _ {
                 $$ = expressions;
               }
+Program    <- init:InitBlock? _ body:ExprList {
+                $$ = create_program_root(init, body);
+              }
+
+# Matches: (init (define total 0) (define steps 1))
+InitBlock  <- '(' _ "init" _ list:ExprList _ ')' { $$ = list; }
 
 ExprList   <- first:Expr rest:(_ Expr)* {
                 ASTNode* block = create_block_node();
