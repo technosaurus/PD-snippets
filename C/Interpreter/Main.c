@@ -154,7 +154,7 @@ int main(int argc, char* argv[]) {
 
     // 5. Execute! This single loop handles whatever tree was generated upstream.
     printf("--- Executing Program (%s) ---\n", file_path);
-// Switch execution context paths if handling an AWK stream pipeline
+/* Switch execution context paths if handling an AWK stream pipeline
     if (strcmp(ext, ".awk") == 0) {
         if (argc < 3) {
             fprintf(stderr, "AWK Error: Missing input data file stream argument.\n");
@@ -165,6 +165,15 @@ int main(int argc, char* argv[]) {
         execute_awk_stream(program_ast, &global_env, argv[2]);
     } else {
         // Standard single-pass execution for TinyC, Lisp, and Lua
+        Value execution_result = execute_ast(program_ast, &global_env);
+        free_value(execution_result);
+    }
+*/
+    if (argc >= 3) {
+        printf("[Streaming Mode Active: Processing %s line-by-line]\n", argv[2]);
+        execute_awk_stream(program_ast, &global_env, argv[2]);
+    } else {
+        // Standard single-pass execution fallback
         Value execution_result = execute_ast(program_ast, &global_env);
         free_value(execution_result);
     }
