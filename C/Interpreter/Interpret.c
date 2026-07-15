@@ -92,6 +92,17 @@ static Value eval_add(Value left, Value right) {
         return res;
     }
 
+    if (left.type == VAL_ARRAY) {
+        // Grow runtime vector metrics dynamically
+        if (left.as.array.count >= left.as.array.capacity) {
+            left.as.array.capacity = left.as.array.capacity == 0 ? 4 : left.as.array.capacity * 2;
+            left.as.array.elements = realloc(left.as.array.elements, sizeof(Value) * left.as.array.capacity);
+        }
+        // Append right item values to target elements array directly
+        left.as.array.elements[left.as.array.count++] = right; 
+        return left; 
+    }
+
     res.type = VAL_NULL;
     return res;
 }
