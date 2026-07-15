@@ -11,13 +11,19 @@
         if (**src_ptr == '\0') return -1;
         return (int)(*(*src_ptr)++);
     }
+    
+    /* Helper to track line numbers for error reporting */
+    static int lua_line_number = 1;
+    static void lua_track_newline(void) {
+        lua_line_number++;
+    }
 }
 
 # --- Parsing Rules ---
 
-Program    <- _ statements:Chunk _ { $$ = statements; }
+Program    <- _ body:Chunk _ { $$ = body; }
 
-Program    <- init:InitBlock? _ body:Chunk {
+Program    <- _ init:InitBlock _ body:Chunk _ {
                 $$ = create_program_root(init, body);
               }
 
@@ -35,21 +41,29 @@ Chunk      <- first:Stat rest:(_ Stat)* {
 Stat       <- FuncDef
             / IfStat
             / WhileStat
+            / PrintStat
             / AssignStat
-            / Expr
+            / ExprStat
+
+ExprStat   <- Expr
+
+PrintStat  <- "print" _ "(" _ arg:Expr _ ")" {
+                $$ = create_print_node(arg);
+              }
 
 AssignStat <- id:Ident _ '=' _ expr:Expr {
                 $$ = create_assignment_node(id->data.id_name, expr);
                 free(id->data.id_name); free(id);
               }
 
-IfStat     <- "if" _ Cond:Expr _ "then" _ Then:Chunk ElseStat:(_ "else" _ Chunk)? _ "end" {
-                ASTNode* else_branch = (ElseStat != NULL) ? ElseStat : NULL;
-                $$ = create_if_node(Cond, Then, else_branch);
+IfStat     <- "if" _ cond:Expr _ "then" _ then_body:Chunk 
+              else_body:(_ "else" _ Chunk)? _ "end" {
+                ASTNode* else_branch = (else_body != NULL) ? else_body : NULL;
+                $$ = create_if_node(cond, then_body, else_branch);
               }
 
-WhileStat  <- "while" _ Cond:Expr _ "do" _ Body:Chunk _ "end" {
-                $$ = create_while_node(Cond, Body);
+WhileStat  <- "while" _ cond:Expr _ "do" _ body:Chunk _ "end" {
+                $$ = create_while_node(cond, body);
               }
 
 FuncDef    <- "function" _ name:Ident _ "(" _ params:ParamList? _ ")" _ body:Chunk _ "end" {
@@ -70,41 +84,80 @@ FuncDef    <- "function" _ name:Ident _ "(" _ params:ParamList? _ ")" _ body:Chu
                 free(name->data.id_name); free(name);
               }
 
-ParamList  <- first:Ident rest:(_ "," _ Ident)* { $$ = first; }
+ParamList  <- first:Ident rest:(_ "," _ Ident)* {
+                ASTNode* param_list = create_block_node();
+                append_to_block(param_list, first);
+                for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                    ASTNode* param = pcc_get_value(rest, i);
+                    append_to_block(param_list, param);
+                }
+                $$ = param_list;
+              }
 
-Expr       <- ComparisonExpr
+# Expression grammar with proper precedence (lowest to highest):
+# 1. LogicalOr
+# 2. LogicalAnd
+# 3. Comparison (<, >, ==)
+# 4. Addition/Subtraction
+# 5. Primary (literals, identifiers, function calls, array indexing, etc.)
+
 Expr       <- LogicalOrExpr
 
-LogicalOrExpr  <- left:LogicalAndExpr _ "or" _ right:LogicalOrExpr { $$ = create_logical_node("or", left, right); }
-                / LogicalAndExpr
+LogicalOrExpr  <- left:LogicalAndExpr rest:(_ "or" _ LogicalAndExpr)* {
+                    ASTNode* result = left;
+                    for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                        result = create_logical_node("or", result, pcc_get_value(rest, i));
+                    }
+                    $$ = result;
+                  }
 
-LogicalAndExpr <- left:ComparisonExpr _ "and" _ right:LogicalAndExpr { $$ = create_logical_node("and", left, right); }
-                / ComparisonExpr
+LogicalAndExpr <- left:ComparisonExpr rest:(_ "and" _ ComparisonExpr)* {
+                    ASTNode* result = left;
+                    for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                        result = create_logical_node("and", result, pcc_get_value(rest, i));
+                    }
+                    $$ = result;
+                  }
 
-ComparisonExpr 
-           <- left:MathExpr _ "<" _ right:ComparisonExpr { $$ = create_binary_node('<', left, right); }
-            / left:MathExpr _ ">" _ right:ComparisonExpr { $$ = create_binary_node('>', left, right); }
-            / left:MathExpr _ "==" _ right:ComparisonExpr { $$ = create_binary_node('=', left, right); }
-            / MathExpr
+ComparisonExpr <- left:MathExpr op:(_ CompOp _)? right:MathExpr? {
+                    if(op != NULL && right != NULL) {
+                        const char* op_str = (const char*)op;
+                        char op_char = op_str[0];
+                        if(op_str[1] == '=') op_char = '=';
+                        $$ = create_binary_node(op_char, left, right);
+                    } else {
+                        $$ = left;
+                    }
+                  }
 
-MathExpr   <- left:Term _ '+' _ right:MathExpr { $$ = create_binary_node('+', left, right); }
-            / left:MathExpr _ '-' _ right:MathExpr { $$ = create_binary_node('-', left, right); }
-            / Term
+CompOp     <- "==" / "<" / ">"
 
-Term       <- base:Ident _ "[" _ idx:Expr _ "]" { $$ = create_index_node(base, idx); }
-            / "{}" { 
-                Value v = { VAL_ARRAY, .as.array.elements = NULL, .as.array.count = 0, .as.array.capacity = 0 };
-                $$ = create_literal_node(v);
+# Use iteration instead of recursion to avoid left-recursion problems
+MathExpr   <- left:Term rest:(_ AddOp _ Term)* {
+                ASTNode* result = left;
+                for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                    // rest contains tuples of (op, operand)
+                    // This requires careful handling based on your PCC framework
+                    result = create_binary_node('+', result, pcc_get_value(rest, i));
+                }
+                $$ = result;
               }
-            / "not" _ operand:MathExpr { $$ = create_unary_node('!', operand); }
-            / '"' text:< [^"\\]* > '"' {
-                Value v = { VAL_STRING, .as.s_val = (char*)text };
-                $$ = create_literal_node(v);
-              }
-            / "print" _ "(" _ arg:Expr _ ")" {
-                $$ = create_print_node(arg);
-              }
-            / name:Ident _ "(" _ args:ArgList? _ ")" {
+
+AddOp      <- "+" / "-"
+
+Term       <- UnaryExpr
+
+UnaryExpr  <- "not" _ operand:Term { $$ = create_unary_node('!', operand); }
+            / Primary
+
+Primary    <- FunctionCall
+            / ArrayIndexing
+            / StringLiteral
+            / IntegerLiteral
+            / ArrayLiteral
+            / Ident
+
+FunctionCall <- name:Ident _ "(" _ args:ArgList? _ ")" {
                 ASTNode* call = create_call_node(name->data.id_name);
                 int count = pcc_get_value_count(args);
                 for(int i = 0; i < count; i++) {
@@ -113,12 +166,42 @@ Term       <- base:Ident _ "[" _ idx:Expr _ "]" { $$ = create_index_node(base, i
                 $$ = call;
                 free(name->data.id_name); free(name);
               }
-            / val:< [0-9]+ > { Value v = { VAL_INT, .as.i_val = atoi(val) }; $$ = create_literal_node(v); }
-            / Ident
 
-ArgList    <- first:Expr rest:(_ "," _ Expr)* { $$ = first; }
+ArrayIndexing <- base:Ident _ "[" _ idx:Expr _ "]" {
+                  $$ = create_index_node(base, idx);
+                }
 
-Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > { $$ = create_identifier_node(name); }
+StringLiteral <- '"' text:< ( '\\' . / [^"\\] )* > '"' {
+                 Value v = { VAL_STRING, .as.s_val = (char*)text };
+                 $$ = create_literal_node(v);
+               }
 
-_          <- [ \t\n\r]* ( "--" [^\n]* [\n] _ )* # Includes support for Lua style comments
+IntegerLiteral <- val:< [0-9]+ > {
+                  Value v = { VAL_INT, .as.i_val = atoi(val) };
+                  $$ = create_literal_node(v);
+                }
+
+ArrayLiteral <- "{}" {
+                Value v = { VAL_ARRAY, .as.array.elements = NULL, .as.array.count = 0, .as.array.capacity = 0 };
+                $$ = create_literal_node(v);
+              }
+
+ArgList    <- first:Expr rest:(_ "," _ Expr)* {
+                ASTNode* arg_list = create_block_node();
+                append_to_block(arg_list, first);
+                for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                    ASTNode* arg = pcc_get_value(rest, i);
+                    append_to_block(arg_list, arg);
+                }
+                $$ = arg_list;
+              }
+
+Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > {
+                $$ = create_identifier_node(name);
+              }
+
+_          <- ([ \t\n\r]+ / Comment)*
+
+Comment    <- "--" [^\n]*
+
 %%
