@@ -24,7 +24,7 @@ typedef struct awk_context_tag awk_context_t;
 awk_context_t* awk_create(void* user_data);
 int awk_parse(awk_context_t* ctx, ASTNode** result);
 void awk_destroy(awk_context_t* ctx);
-void execute_awk_stream(ASTNode* program_ast, Environment* global_env, const char* data_file_path);
+void execute_polyglot_stream(ASTNode* program_ast, Environment* global_env, const char* data_file_path);
 /* =========================================================================
    1. UTILITY: FILE LOADING INTERFACE
    ========================================================================= */
@@ -171,7 +171,7 @@ int main(int argc, char* argv[]) {
 */
     if (argc >= 3) {
         printf("[Streaming Mode Active: Processing %s line-by-line]\n", argv[2]);
-        execute_awk_stream(program_ast, &global_env, argv[2]);
+        execute_polyglot_stream(program_ast, &global_env, argv[2]);
     } else {
         // Standard single-pass execution fallback
         Value execution_result = execute_ast(program_ast, &global_env);
