@@ -1,0 +1,234 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "ast.h"
+
+/* =========================================================================
+   1. RUNTIME SCOPING HELPERS
+   ========================================================================= */
+
+// Lookup a variable by name climbing up the scope chain
+static Environment* env_find(Environment* env, const char* name) {
+    Environment* current = env;
+    while (current != NULL) {
+        if (strcmp(current->name, name) == 0) {
+            return current;
+        }
+        current = current->outer;
+    }
+    return NULL;
+}
+
+// Update an existing variable, or crash gracefully if it doesn't exist
+static void env_assign(Environment* env, const char* name, Value val) {
+    Environment* target = env_find(env, name);
+    if (!target) {
+        fprintf(stderr, "Runtime Error: Undefined variable '%s'\n", name);
+        exit(EXIT_FAILURE);
+    }
+    // Free old string memory if overwriting a string value
+    free_value(target->value);
+    
+    target->value = val;
+    // If it's a string, copy the buffer contents safely
+    if (val.type == VAL_STRING && val.as.s_val) {
+        target->value.as.s_val = strdup(val.as.s_val);
+    }
+}
+
+
+/* =========================================================================
+   2. OPERATOR COERCION UTILITIES
+   ========================================================================= */
+
+// Polyglot truthiness helper (e.g., handles JS/Python/C rules for 'true')
+static bool is_truthy(Value val) {
+    switch (val.type) {
+        case VAL_NULL:   return false;
+        case VAL_BOOL:   return val.as.b_val;
+        case VAL_INT:    return val.as.i_val != 0;
+        case VAL_FLOAT:  return val.as.f_val != 0.0;
+        case VAL_STRING: return val.as.s_val != NULL && strlen(val.as.s_val) > 0;
+        default:         return false;
+    }
+}
+
+// Universal numeric and string addition engine
+static Value eval_add(Value left, Value right) {
+    Value res;
+    
+    // 1. Pure Integer Math
+    if (left.type == VAL_INT && right.type == VAL_INT) {
+        res.type = VAL_INT;
+        res.as.i_val = left.as.i_val + right.as.i_val;
+        return res;
+    }
+    
+    // 2. Coerce to Float Math
+    if ((left.type == VAL_INT || left.type == VAL_FLOAT) && 
+        (right.type == VAL_INT || right.type == VAL_FLOAT)) {
+        double l = (left.type == VAL_INT) ? left.as.i_val : left.as.f_val;
+        double r = (right.type == VAL_INT) ? right.as.i_val : right.as.f_val;
+        res.type = VAL_FLOAT;
+        res.as.f_val = l + r;
+        return res;
+    }
+
+    // 3. Polyglot String Concatenation (JS / Shell behavior)
+    if (left.type == VAL_STRING || right.type == VAL_STRING) {
+        res.type = VAL_STRING;
+        char l_buf[64] = "";
+        char r_buf[64] = "";
+        
+        // Quick formats to flat strings
+        if (left.type == VAL_INT) sprintf(l_buf, "%d", left.as.i_val);
+        else if (left.type == VAL_STRING) strcpy(l_buf, left.as.s_val ? left.as.s_val : "");
+        
+        if (right.type == VAL_INT) sprintf(r_buf, "%d", right.as.i_val);
+        else if (right.type == VAL_STRING) strcpy(r_buf, right.as.s_val ? right.as.s_val : "");
+        
+        res.as.s_val = malloc(strlen(l_buf) + strlen(r_buf) + 1);
+        sprintf(res.as.s_val, "%s%s", l_buf, r_buf);
+        return res;
+    }
+
+    res.type = VAL_NULL;
+    return res;
+}
+
+
+/* =========================================================================
+   3. THE MAIN AST VISITOR LOOP
+   ========================================================================= */
+
+Value execute_ast(ASTNode* node, Environment* env) {
+    Value null_val = { VAL_NULL, {0} };
+    if (!node) return null_val;
+
+    switch (node->type) {
+        
+        case NODE_LITERAL: {
+            // Return literals instantly. Strings are cloned so the pipeline remains pure.
+            Value res = node->data.literal;
+            if (res.type == VAL_STRING && res.as.s_val) {
+                res.as.s_val = strdup(res.as.s_val);
+            }
+            return res;
+        }
+
+        case NODE_IDENTIFIER: {
+            Environment* found = env_find(env, node->data.id_name);
+            if (!found) {
+                fprintf(stderr, "Runtime Error: Variable '%s' is not defined.\n", node->data.id_name);
+                exit(EXIT_FAILURE);
+            }
+            // Clone string variables to avoid multiple references to the same buffer
+            Value res = found->value;
+            if (res.type == VAL_STRING && res.as.s_val) {
+                res.as.s_val = strdup(res.as.s_val);
+            }
+            return res;
+        }
+
+        case NODE_BINARY_OP: {
+            Value left = execute_ast(node->data.binary.left, env);
+            Value right = execute_ast(node->data.binary.right, env);
+            Value res = null_val;
+
+            if (node->data.binary.op == '+') {
+                res = eval_add(left, right);
+            } else if (node->data.binary.op == '-') {
+                if (left.type == VAL_INT && right.type == VAL_INT) {
+                    res.type = VAL_INT;
+                    res.as.i_val = left.as.i_val - right.as.i_val;
+                }
+            }
+            
+            // Clean up temporary tree evaluation branches
+            free_value(left);
+            free_value(right);
+            return res;
+        }
+
+        case NODE_ASSIGNMENT: {
+            Value val = execute_ast(node->data.assign.value, env);
+            Environment* target = env_find(env, node->data.assign.name);
+            
+            if (target) {
+                // If it already exists, update it
+                env_assign(env, node->data.assign.name, val);
+            } else {
+                // Micro-optimization: Implicit definition if variable is new (Python/JS mode)
+                Environment* new_var = malloc(sizeof(Environment));
+                new_var->name = strdup(node->data.assign.name);
+                new_var->value = val;
+                if (val.type == VAL_STRING && val.as.s_val) {
+                    new_var->value.as.s_val = strdup(val.as.s_val);
+                }
+                // Prepend to current scope node
+                new_var->outer = env->outer; 
+                env->outer = new_var;
+            }
+            return val; 
+        }
+
+        case NODE_IF_STATEMENT: {
+            Value cond = execute_ast(node->data.if_stmt.condition, env);
+            Value res = null_val;
+            
+            if (is_truthy(cond)) {
+                res = execute_ast(node->data.if_stmt.then_branch, env);
+            } else if (node->data.if_stmt.else_branch) {
+                res = execute_ast(node->data.if_stmt.else_branch, env);
+            }
+            
+            free_value(cond);
+            return res;
+        }
+
+        case NODE_WHILE_LOOP: {
+            Value cond = execute_ast(node->data.while_loop.condition, env);
+            while (is_truthy(cond)) {
+                free_value(cond); // Clear last condition calculation
+                Value body_res = execute_ast(node->data.while_loop.body, env);
+                free_value(body_res); // Loops yield null sequentially
+                cond = execute_ast(node->data.while_loop.condition, env);
+            }
+            free_value(cond);
+            return null_val;
+        }
+
+        case NODE_BLOCK: {
+            Value last_val = null_val;
+            // Native micro-scoping frame setup
+            Environment block_scope = { .name = "", .value = null_val, .outer = env };
+
+            for (int i = 0; i < node->data.block.count; i++) {
+                free_value(last_val); // Drop memory intermediate statement yields
+                last_val = execute_ast(node->data.block.statements[i], &block_scope);
+            }
+
+            // Clean up variable maps instantiated inside this local block stack footprint
+            Environment* cur = block_scope.outer;
+            while (cur != env && cur != NULL) {
+                Environment* next = cur->outer;
+                free((char*)cur->name);
+                free_value(cur->value);
+                free(cur);
+                cur = next;
+            }
+
+            return last_val;
+        }
+
+        case NODE_PRINT: {
+            Value target = execute_ast(node->data.print_target, env);
+            if (target.type == VAL_INT) printf("%d\n", target.as.i_val);
+            else if (target.type == VAL_FLOAT) printf("%f\n", target.as.f_val);
+            else if (target.type == VAL_STRING) printf("%s\n", target.as.s_val ? target.as.s_val : "null");
+            else if (target.type == VAL_BOOL) printf("%s\n", target.as.b_val ? "true" : "false");
+            return target; // Returns evaluated values upstream
+        }
+    }
+    return null_val;
+}
