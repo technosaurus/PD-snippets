@@ -106,7 +106,12 @@ MathExpr   <- left:Term _ '+' _ right:MathExpr { $$ = create_binary_node('+', le
             / left:MathExpr _ '-' _ right:MathExpr { $$ = create_binary_node('-', left, right); }
             / Term
 
-Term       <- str:StringLiteral { $$ = str; }
+Term       <- base:Ident _ "[" _ idx:Expr _ "]" { $$ = create_index_node(base, idx); }
+            / "[]" { 
+                Value v = { VAL_ARRAY, .as.array.elements = NULL, .as.array.count = 0, .as.array.capacity = 0 };
+                $$ = create_literal_node(v);
+              }
+            / str:StringLiteral { $$ = str; }
             / name:Ident _ "(" _ args:ArgRegList? _ ")" {
                 ASTNode* call = create_call_node(name->data.id_name);
                 int count = pcc_get_value_count(args);
