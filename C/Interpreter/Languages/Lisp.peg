@@ -32,7 +32,29 @@ ExprList   <- first:Expr rest:(_ Expr)* {
 Expr       <- '(' _ body:SExpr _ ')' { $$ = body; }
             / Term
 
-SExpr      <- '+' _ left:Expr _ right:Expr { $$ = create_binary_node('+', left, right); }
+SExpr      <- "define" _ name:Ident _ "(" _ "lambda" _ "(" _ params:LispParamList? _ ")" _ body:ExprList _ ")" {
+                Value f_val; f_val.type = VAL_FUNCTION;
+                f_val.as.func.body = body;
+                int count = pcc_get_value_count(params);
+                f_val.as.func.param_count = count;
+                f_val.as.func.parameters = malloc(sizeof(char*) * count);
+                for(int i = 0; i < count; i++) {
+                    ASTNode* p_node = pcc_get_value(params, i);
+                    f_val.as.func.parameters[i] = strdup(p_node->data.id_name);
+                    free(p_node->data.id_name); free(p_node);
+                }
+                $$ = create_assignment_node(name->data.id_name, create_literal_node(f_val));
+                free(name->data.id_name); free(name);
+              }
+            / name:Ident _ args:LispArgList {
+                ASTNode* call = create_call_node(name->data.id_name);
+                for(int i = 0; i < pcc_get_value_count(args); i++) {
+                    append_argument(call, pcc_get_value(args, i));
+                }
+                $$ = call;
+                free(name->data.id_name); free(name);
+              }
+            / '+' _ left:Expr _ right:Expr { $$ = create_binary_node('+', left, right); }
             / '-' _ left:Expr _ right:Expr { $$ = create_binary_node('-', left, right); }
             / '<' _ left:Expr _ right:Expr { $$ = create_binary_node('<', left, right); }
             / '>' _ left:Expr _ right:Expr { $$ = create_binary_node('>', left, right); }
