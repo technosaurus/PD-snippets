@@ -13,10 +13,18 @@ typedef enum {
     VAL_FLOAT,
     VAL_STRING,
     VAL_FUNCTION,
+    VAL_ARRAY,
     VAL_OBJECT // For extensions (arrays, dicts, etc..
 } ValueType;
 
 struct ASTNode;
+typedef struct Value Value; 
+
+typedef struct {
+    struct Value* elements; // Dynamic array of element values
+    int count;
+    int capacity;
+} ArrayObj;
 
 typedef struct {
     char** parameters; // Array of parameter name strings
@@ -32,6 +40,7 @@ typedef struct {
         double f_val;
         char* s_val; // Dynamically allocated or literal string
         FunctionObj func;
+        ArrayObj array;
     } as;
 } Value;
 
@@ -55,7 +64,8 @@ typedef enum {
     NODE_IF_STATEMENT,
     NODE_WHILE_LOOP,
     NODE_PRINT,
-    NODE_FUNCTION_CALL
+    NODE_FUNCTION_CALL,
+    NODE_INDEX
 } NodeType;
 
 
@@ -123,6 +133,11 @@ typedef struct ASTNode { //todo reorder with enums
             struct ASTNode* left;
             struct ASTNode* right;
         } logical;
+        // NODE_INDEX
+        struct {
+            struct ASTNode* target;
+            struct ASTNode* index;
+        } index;
 
     } data;
 } ASTNode;
@@ -155,6 +170,10 @@ ASTNode* create_print_node(ASTNode* target);
 
 ASTNode* create_call_node(const char* name);
 void append_argument(ASTNode* call_node, ASTNode* arg);
+
+
+// Factory signature
+ASTNode* create_index_node(ASTNode* target, ASTNode* index);
 
 // Deep Garbage Collection
 void free_ast_node(ASTNode* node);
