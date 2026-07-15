@@ -1,19 +1,57 @@
-%prefix "tinyc"
+%prefix "lisp"
+
 %header {
     #include "ast.h"
+    #define PCC_GETCHAR(aux) lisp_get_next_char(aux)
 }
 
-# The root node returns our shared ASTNode pointer
-Program    <- _ expr:Expr _ { $$ = expr; }
+%source {
+    static int lisp_get_next_char(void* aux) {
+        const char** src_ptr = (const char**)aux;
+        if (**src_ptr == '\0') return -1;
+        return (int)(*(*src_ptr)++);
+    }
+}
 
-Expr       <- left:Term _ '+' _ right:Expr { 
-                $$ = create_binary_node('+', left, right); 
+# --- Parsing Rules ---
+
+# S-Expressions can be chained together linearly
+Program    <- _ expressions:ExprList _ {
+                $$ = expressions;
               }
+
+ExprList   <- first:Expr rest:(_ Expr)* {
+                ASTNode* block = create_block_node();
+                append_to_block(block, first);
+                for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                    append_to_block(block, pcc_get_value(rest, i));
+                }
+                $$ = block;
+              }
+
+Expr       <- '(' _ body:SExpr _ ')' { $$ = body; }
             / Term
 
-Term       <- val:< [0-9]+ > { 
+SExpr      <- '+' _ left:Expr _ right:Expr { $$ = create_binary_node('+', left, right); }
+            / '-' _ left:Expr _ right:Expr { $$ = create_binary_node('-', left, right); }
+            / "define" _ id:Ident _ val:Expr {
+                $$ = create_assignment_node(id->data.id_name, val);
+                free(id->data.id_name);
+                free(id);
+              }
+            / "display" _ val:Expr {
+                $$ = create_print_node(val);
+              }
+
+Term       <- val:< [0-9]+ > {
                 Value v = { VAL_INT, .as.i_val = atoi(val) };
-                $$ = create_literal_node(v); 
+                $$ = create_literal_node(v);
+              }
+            / Ident
+
+Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > {
+                $$ = create_identifier_node(name);
               }
 
 _          <- [ \t\n\r]*
+%%
