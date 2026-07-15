@@ -30,6 +30,10 @@ tcl_context_t* tcl_create(void* user_data);
 int tcl_parse(tcl_context_t* ctx, ASTNode** result);
 void tcl_destroy(tcl_context_t* ctx);
 
+typedef struct pascal_context_tag pascal_context_t;
+pascal_context_t* pascal_create(void* user_data);
+int pascal_parse(pascal_context_t* ctx, ASTNode** result);
+void pascal_destroy(pascal_context_t* ctx);
 
 void execute_polyglot_stream(ASTNode* program_ast, Environment* global_env, const char* data_file_path);
 /* =========================================================================
@@ -130,6 +134,17 @@ static ASTNode* run_tcl_parser(const char* source) {
     return NULL;
 }
 
+static ASTNode* run_pascal_parser(const char* source) {
+    ASTNode* root_node = NULL;
+    pascal_context_t* ctx = pascal_create((void*)source);
+    if (pascal_parse(ctx, &root_node) != 0) {
+        pascal_destroy(ctx);
+        return root_node;
+    }
+    pascal_destroy(ctx);
+    return NULL;
+}
+
 /* =========================================================================
    3. THE MAIN PROGRAM ENTRY POINT
    ========================================================================= */
@@ -157,6 +172,8 @@ int main(int argc, char* argv[]) {
         program_ast = run_awk_parser(source_code);
     } else if (strcmp(ext, ".tcl") == 0) { // <-- Added Tcl Route
         program_ast = run_tcl_parser(source_code);
+    } else if (strcmp(ext, ".pas") == 0 || strcmp(ext, ".pascal") == 0) { // <-- Added Pascal Route
+        program_ast = run_pascal_parser(source_code);
     } else {
         fprintf(stderr, "Error: Unsupported language target extension '%s'.\n", ext);
         free(source_code);
