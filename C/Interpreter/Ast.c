@@ -88,6 +88,24 @@ ASTNode* create_block_node(void) {
     return node;
 }
 
+ASTNode* create_call_node(const char* name) {
+    ASTNode* node = (ASTNode*)malloc(sizeof(ASTNode));
+    node->type = NODE_FUNCTION_CALL;
+    node->data.call.name = strdup(name);
+    node->data.call.arg_count = 0;
+    node->data.call.arguments = (ASTNode**)malloc(sizeof(ASTNode*) * 4); // Initial capacity
+    return node;
+}
+
+void append_argument(ASTNode* call_node, ASTNode* arg) {
+    if (!call_node || call_node->type != NODE_FUNCTION_CALL || !arg) return;
+    int index = call_node->data.call.arg_count++;
+    // Basic growable logic simplified for clarity
+    call_node->data.call.arguments = (ASTNode**)realloc(
+        call_node->data.call.arguments, sizeof(ASTNode*) * (index + 1));
+    call_node->data.call.arguments[index] = arg;
+}
+
 void append_to_block(ASTNode* block_node, ASTNode* statement) {
     if (!block_node || block_node->type != NODE_BLOCK || !statement) return;
 
@@ -127,7 +145,7 @@ void free_value(Value val) {
 void free_ast_node(ASTNode* node) {
     if (!node) return;
 
-    switch (node->type) {
+    switch (node->type) { // todo reorder in enum order
         case NODE_LITERAL:
             free_value(node->data.literal);
             break;
@@ -171,6 +189,15 @@ void free_ast_node(ASTNode* node) {
         case NODE_PRINT:
             free_ast_node(node->data.print_target);
             break;
+
+        case NODE_FUNCTION_CALL:
+            free(node->data.call.name);
+            for (int i = 0; i < node->data.call.arg_count; i++) {
+                free_ast_node(node->data.call.arguments[i]);
+            }
+            free(node->data.call.arguments);
+            break;
+
     }
 
     free(node);
