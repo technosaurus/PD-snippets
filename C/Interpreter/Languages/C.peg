@@ -34,6 +34,7 @@ StmtList   <- first:Stmt rest:(_ Stmt)* {
 
 Stmt       <- AssignStmt
             / PrintStmt
+            / IfStmt
             / Expr
 
 AssignStmt <- id:Ident _ '=' _ expr:Expr _ ';' {
@@ -43,9 +44,18 @@ AssignStmt <- id:Ident _ '=' _ expr:Expr _ ';' {
                 free(id);
               }
 
-PrintStmt  <- "print" _ '(' _ expr:Expr _ ')' _ ';' {
-                $$ = create_print_node(expr);
+IfStmt     <- "if" _ "(" _ Cond:Expr _ ")" _ Then:BlockOrStmt ElseStmt:(_ "else" _ BlockOrStmt)? {
+                ASTNode* else_branch = (ElseStmt != NULL) ? ElseStmt : NULL;
+                $$ = create_if_node(Cond, Then, else_branch);
               }
+
+BlockOrStmt <- "{" _ list:StmtList _ "}" { $$ = list; }
+             / single:Stmt               { 
+                 /* Wrap single statement in a block for uniform scoping execution */
+                 ASTNode* b = create_block_node();
+                 append_to_block(b, single);
+                 $$ = b;
+               }
 
 Expr       <- left:Term _ '+' _ right:Expr { $$ = create_binary_node('+', left, right); }
             / left:Term _ '-' _ right:Expr { $$ = create_binary_node('-', left, right); }
