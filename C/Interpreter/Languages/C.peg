@@ -1,19 +1,66 @@
 %prefix "tinyc"
+
 %header {
     #include "ast.h"
+    /* PackCC internal function override to pull text from our context pointer */
+    #define PCC_GETCHAR(aux) tinyc_get_next_char(aux)
 }
 
-# The root node returns our shared ASTNode pointer
-Program    <- _ expr:Expr _ { $$ = expr; }
+%source {
+    /* Simple wrapper to feed our string buffer lineally into the PackCC loop */
+    static int tinyc_get_next_char(void* aux) {
+        const char** src_ptr = (const char**)aux;
+        if (**src_ptr == '\0') return -1;
+        return (int)(*(*src_ptr)++);
+    }
+}
 
-Expr       <- left:Term _ '+' _ right:Expr { 
-                $$ = create_binary_node('+', left, right); 
+# --- Parsing Rules ---
+
+# A program is a sequence of statements inside a block
+Program    <- _ statements:StmtList _ {  
+                $$ = statements; 
               }
+
+StmtList   <- first:Stmt rest:(_ Stmt)* {
+                ASTNode* block = create_block_node();
+                append_to_block(block, first);
+                /* Loop through any subsequent statements matched in the block */
+                for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                    append_to_block(block, pcc_get_value(rest, i));
+                }
+                $$ = block;
+              }
+
+Stmt       <- AssignStmt
+            / PrintStmt
+            / Expr
+
+AssignStmt <- id:Ident _ '=' _ expr:Expr _ ';' {
+                $$ = create_assignment_node(id->data.id_name, expr);
+                /* Free the temporary identifier node shell used for pulling the name */
+                free(id->data.id_name);
+                free(id);
+              }
+
+PrintStmt  <- "print" _ '(' _ expr:Expr _ ')' _ ';' {
+                $$ = create_print_node(expr);
+              }
+
+Expr       <- left:Term _ '+' _ right:Expr { $$ = create_binary_node('+', left, right); }
+            / left:Term _ '-' _ right:Expr { $$ = create_binary_node('-', left, right); }
             / Term
 
-Term       <- val:< [0-9]+ > { 
+Term       <- val:< [0-9]+ > {
                 Value v = { VAL_INT, .as.i_val = atoi(val) };
-                $$ = create_literal_node(v); 
+                $$ = create_literal_node(v);
+              }
+            / Ident
+
+Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > {
+                $$ = create_identifier_node(name);
               }
 
 _          <- [ \t\n\r]*
+%%
+
