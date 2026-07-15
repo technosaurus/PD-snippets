@@ -12,8 +12,17 @@ typedef enum {
     VAL_INT,
     VAL_FLOAT,
     VAL_STRING,
-    VAL_OBJECT // For extensions (arrays, dicts, etc.)
+    VAL_FUNCTION,
+    VAL_OBJECT // For extensions (arrays, dicts, etc..
 } ValueType;
+
+struct ASTNode;
+
+typedef struct {
+    char** parameters; // Array of parameter name strings
+    int param_count;
+    struct ASTNode* body;  // Point to a NODE_BLOCK statement list
+} FunctionObj;
 
 typedef struct {
     ValueType type;
@@ -22,6 +31,7 @@ typedef struct {
         int i_val;
         double f_val;
         char* s_val; // Dynamically allocated or literal string
+        FunctionObj func;
     } as;
 } Value;
 
@@ -43,7 +53,8 @@ typedef enum {
     NODE_BLOCK,
     NODE_IF_STATEMENT,
     NODE_WHILE_LOOP,
-    NODE_PRINT
+    NODE_PRINT,
+    NODE_FUNCTION_CALL
 } NodeType;
 
 
@@ -101,6 +112,12 @@ typedef struct ASTNode {
         // NODE_PRINT: Standard language feature translation target
         struct ASTNode* print_target;
 
+        struct {
+            char* name;
+            struct ASTNode** arguments; // Dynamic array of ASTNode expression trees
+            int arg_count;
+        } call;
+
     } data;
 } ASTNode;
 
@@ -128,6 +145,9 @@ void append_to_block(ASTNode* block_node, ASTNode* statement);
 
 // Helper Factory for Print Statement Translation
 ASTNode* create_print_node(ASTNode* target);
+
+ASTNode* create_call_node(const char* name);
+void append_argument(ASTNode* call_node, ASTNode* arg);
 
 // Deep Garbage Collection
 void free_ast_node(ASTNode* node);
