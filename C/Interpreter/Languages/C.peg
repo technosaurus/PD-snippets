@@ -35,6 +35,7 @@ StmtList   <- first:Stmt rest:(_ Stmt)* {
 Stmt       <- AssignStmt
             / PrintStmt
             / IfStmt
+            / WhileStmt
             / Expr
 
 AssignStmt <- id:Ident _ '=' _ expr:Expr _ ';' {
@@ -56,6 +57,10 @@ BlockOrStmt <- "{" _ list:StmtList _ "}" { $$ = list; }
                  append_to_block(b, single);
                  $$ = b;
                }
+
+WhileStmt  <- "while" _ "(" _ Cond:Expr _ ")" _ Body:BlockOrStmt {
+                $$ = create_while_node(Cond, Body);
+              }
 
 Expr       <- left:Term _ '+' _ right:Expr { $$ = create_binary_node('+', left, right); }
             / left:Term _ '-' _ right:Expr { $$ = create_binary_node('-', left, right); }
