@@ -34,6 +34,10 @@ Expr       <- '(' _ body:SExpr _ ')' { $$ = body; }
 
 SExpr      <- '+' _ left:Expr _ right:Expr { $$ = create_binary_node('+', left, right); }
             / '-' _ left:Expr _ right:Expr { $$ = create_binary_node('-', left, right); }
+            / '<' _ left:Expr _ right:Expr { $$ = create_binary_node('<', left, right); }
+            / '>' _ left:Expr _ right:Expr { $$ = create_binary_node('>', left, right); }
+            / '=' _ left:Expr _ right:Expr { $$ = create_binary_node('=', left, right); }
+
             / "if" _ Cond:Expr _ Then:Expr Else:(_ Expr)? {
                 ASTNode* else_branch = (Else != NULL) ? Else : NULL;
                 $$ = create_if_node(Cond, Then, else_branch);
