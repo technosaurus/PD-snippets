@@ -1,0 +1,81 @@
+%prefix "awk"
+
+%header {
+    #include "ast.h"
+    #define PCC_GETCHAR(aux) awk_get_next_char(aux)
+}
+
+%source {
+    static int awk_get_next_char(void* aux) {
+        const char** src_ptr = (const char**)aux;
+        if (**src_ptr == '\0') return -1;
+        return (int)(*(*src_ptr)++);
+    }
+}
+
+# --- Parsing Rules ---
+
+Program    <- _ blocks:BlockList _ { $$ = blocks; }
+
+BlockList  <- first:PatternAction rest:(_ PatternAction)* {
+                ASTNode* block = create_block_node();
+                append_to_block(block, first);
+                for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                    append_to_block(block, pcc_get_value(rest, i));
+                }
+                $$ = block;
+              }
+
+# AWK structural pattern match: condition { actions }
+# We translate this paradigm straight into a standard NODE_IF_STATEMENT!
+PatternAction <- cond:Expr _ "{" _ body:ActionList _ "}" {
+                $$ = create_if_node(cond, body, NULL);
+               }
+               / "{" _ body:ActionList _ "}" {
+                /* If condition is omitted, pass a 'true' literal so it always executes */
+                Value true_val = { VAL_BOOL, .as.b_val = true };
+                $$ = create_if_node(create_literal_node(true_val), body, NULL);
+               }
+
+ActionList <- first:Stat rest:(_ Stat)* {
+                ASTNode* block = create_block_node();
+                append_to_block(block, first);
+                for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                    append_to_block(block, pcc_get_value(rest, i));
+                }
+                $$ = block;
+              }
+
+Stat       <- AssignStat _ ";"?
+            / PrintStat _ ";"?
+            / Expr _ ";"?
+
+AssignStat <- id:Ident _ "=" _ expr:Expr {
+                $$ = create_assignment_node(id->data.id_name, expr);
+                free(id->data.id_name); free(id);
+              }
+
+PrintStat  <- "print" _ expr:Expr {
+                $$ = create_print_node(expr);
+              }
+
+Expr       <- ComparisonExpr
+
+ComparisonExpr 
+           <- left:MathExpr _ "<" _ right:ComparisonExpr { $$ = create_binary_node('<', left, right); }
+            / left:MathExpr _ ">" _ right:ComparisonExpr { $$ = create_binary_node('>', left, right); }
+            / left:MathExpr _ "==" _ right:ComparisonExpr { $$ = create_binary_node('=', left, right); }
+            / MathExpr
+
+MathExpr   <- left:Term _ '+' _ right:MathExpr { $$ = create_binary_node('+', left, right); }
+            / left:MathExpr _ '-' _ right:MathExpr { $$ = create_binary_node('-', left, right); }
+            / Term
+
+Term       <- val:< [0-9]+ > { Value v = { VAL_INT, .as.i_val = atoi(val) }; $$ = create_literal_node(v); }
+            / '"' text:< [^"\\]* > '"' { Value v = { VAL_STRING, .as.s_val = (char*)text }; $$ = create_literal_node(v); }
+            / Ident
+
+Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > { $$ = create_identifier_node(name); }
+
+_          <- [ \t\n\r]* ( "#" [^\n]* [\n] _ )* # Supports standard AWK shell-style comments
+%%
