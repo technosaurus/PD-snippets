@@ -65,7 +65,8 @@ typedef enum {
     NODE_WHILE_LOOP,
     NODE_PRINT,
     NODE_FUNCTION_CALL,
-    NODE_INDEX
+    NODE_INDEX,
+    NODE_PROGRAM_ROOT
 } NodeType;
 
 
@@ -138,6 +139,10 @@ typedef struct ASTNode { //todo reorder with enums
             struct ASTNode* target;
             struct ASTNode* index;
         } index;
+        struct {
+            struct ASTNode* init_block; // Runs once (BEGIN)
+            struct ASTNode* body_block; // Runs per line
+        } root;
 
     } data;
 } ASTNode;
@@ -146,6 +151,9 @@ typedef struct ASTNode { //todo reorder with enums
 /* =========================================================================
    4. MEMORY MANAGEMENT & FACTORY FUNCTIONS
    ========================================================================= */
+
+// Constructor declaration
+ASTNode* create_program_root(ASTNode* init, ASTNode* body);
 
 // Literal / Value Node Constructors
 ASTNode* create_literal_node(Value val);
