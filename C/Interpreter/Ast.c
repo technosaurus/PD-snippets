@@ -58,6 +58,15 @@ ASTNode* create_binary_node(char op, ASTNode* left, ASTNode* right) {
     return node;
 }
 
+ASTNode* create_logical_node(const char* type_str, ASTNode* left, ASTNode* right) {
+    ASTNode* node = (ASTNode*)malloc(sizeof(ASTNode));
+    node->type = NODE_LOGICAL_OP;
+    node->data.logical.type_str = strdup(type_str);
+    node->data.logical.left = left;
+    node->data.logical.right = right;
+    return node;
+}
+
 ASTNode* create_assignment_node(const char* name, ASTNode* value) {
     ASTNode* node = allocate_node(NODE_ASSIGNMENT);
     node->data.assign.name = strdup(name);
@@ -161,6 +170,12 @@ void free_ast_node(ASTNode* node) {
         case NODE_BINARY_OP:
             free_ast_node(node->data.binary.left);
             free_ast_node(node->data.binary.right);
+            break;
+
+       case NODE_LOGICAL_OP:
+            free(node->data.logical.type_str);
+            free_ast_node(node->data.logical.left);
+            free_ast_node(node->data.logical.right);
             break;
 
         case NODE_ASSIGNMENT:
