@@ -16,6 +16,7 @@
 # --- Parsing Rules ---
 
 # S-Expressions can be chained together linearly
+# Supports both simple expression list and init block + body pattern
 Program    <- _ expressions:ExprList _ {
                 $$ = expressions;
               }
@@ -24,8 +25,12 @@ Program    <- init:InitBlock? _ body:ExprList {
               }
 
 # Matches: (init (define total 0) (define steps 1))
-InitBlock  <- '(' _ "init" _ list:ExprList _ ')' { $$ = list; }
+# Wraps initialization expressions for one-time setup
+InitBlock  <- '(' _ "init" _ list:ExprList _ ')' { 
+                $$ = list; 
+              }
 
+# Expression list: groups multiple S-expressions into a block
 ExprList   <- first:Expr rest:(_ Expr)* {
                 ASTNode* block = create_block_node();
                 append_to_block(block, first);
@@ -35,9 +40,11 @@ ExprList   <- first:Expr rest:(_ Expr)* {
                 $$ = block;
               }
 
+# Expression: either a parenthesized S-expr or a terminal value/identifier
 Expr       <- '(' _ body:SExpr _ ')' { $$ = body; }
             / Term
 
+# S-Expressions: special forms and function calls
 SExpr      <- "list" { 
                 Value v = { VAL_ARRAY, .as.array.elements = NULL, .as.array.count = 0, .as.array.capacity = 0 };
                 $$ = create_literal_node(v);
@@ -45,39 +52,70 @@ SExpr      <- "list" {
             / "nth" _ idx:Expr _ target:Expr { 
                 $$ = create_index_node(target, idx); 
               }
-            / "and" _ left:Expr _ right:Expr { $$ = create_logical_node("and", left, right); }
-            / "or"  _ left:Expr _ right:Expr { $$ = create_logical_node("or", left, right); }
-            / "not" _ operand:Expr
+            / "and" _ left:Expr _ right:Expr { 
+                $$ = create_logical_node("and", left, right); 
+              }
+            / "or"  _ left:Expr _ right:Expr { 
+                $$ = create_logical_node("or", left, right); 
+              }
+            / "not" _ operand:Expr { 
+                $$ = create_unary_node('!', operand); 
+              }
             / "define" _ name:Ident _ "(" _ "lambda" _ "(" _ params:LispParamList? _ ")" _ body:ExprList _ ")" {
-                Value f_val; f_val.type = VAL_FUNCTION;
+                Value f_val; 
+                f_val.type = VAL_FUNCTION;
                 f_val.as.func.body = body;
-                int count = pcc_get_value_count(params);
+                int count = params ? pcc_get_value_count(params) : 0;
                 f_val.as.func.param_count = count;
-                f_val.as.func.parameters = malloc(sizeof(char*) * count);
-                for(int i = 0; i < count; i++) {
-                    ASTNode* p_node = pcc_get_value(params, i);
-                    f_val.as.func.parameters[i] = strdup(p_node->data.id_name);
-                    free(p_node->data.id_name); free(p_node);
+                if (count > 0) {
+                    f_val.as.func.parameters = (char**)malloc(sizeof(char*) * count);
+                    if (!f_val.as.func.parameters) {
+                        fprintf(stderr, "Error: Out of memory allocating function parameters\n");
+                        return -1;
+                    }
+                    for(int i = 0; i < count; i++) {
+                        ASTNode* p_node = pcc_get_value(params, i);
+                        f_val.as.func.parameters[i] = strdup(p_node->data.id_name);
+                        free(p_node->data.id_name); 
+                        free(p_node);
+                    }
+                } else {
+                    f_val.as.func.parameters = NULL;
                 }
                 $$ = create_assignment_node(name->data.id_name, create_literal_node(f_val));
-                free(name->data.id_name); free(name);
+                free(name->data.id_name); 
+                free(name);
               }
             / name:Ident _ args:LispArgList {
                 ASTNode* call = create_call_node(name->data.id_name);
-                for(int i = 0; i < pcc_get_value_count(args); i++) {
+                int count = pcc_get_value_count(args);
+                for(int i = 0; i < count; i++) {
                     append_argument(call, pcc_get_value(args, i));
                 }
                 $$ = call;
-                free(name->data.id_name); free(name);
+                free(name->data.id_name); 
+                free(name);
               }
-            / '+' _ left:Expr _ right:Expr { $$ = create_binary_node('+', left, right); }
-            / '-' _ left:Expr _ right:Expr { $$ = create_binary_node('-', left, right); }
-            / '<' _ left:Expr _ right:Expr { $$ = create_binary_node('<', left, right); }
-            / '>' _ left:Expr _ right:Expr { $$ = create_binary_node('>', left, right); }
-            / '=' _ left:Expr _ right:Expr { $$ = create_binary_node('=', left, right); }
-
+            / '+' _ left:Expr _ right:Expr { 
+                $$ = create_binary_node('+', left, right); 
+              }
+            / '-' _ left:Expr _ right:Expr { 
+                $$ = create_binary_node('-', left, right); 
+              }
+            / '<' _ left:Expr _ right:Expr { 
+                $$ = create_binary_node('<', left, right); 
+              }
+            / '>' _ left:Expr _ right:Expr { 
+                $$ = create_binary_node('>', left, right); 
+              }
+            / '=' _ left:Expr _ right:Expr { 
+                $$ = create_binary_node('=', left, right); 
+              }
             / "if" _ Cond:Expr _ Then:Expr Else:(_ Expr)? {
-                ASTNode* else_branch = (Else != NULL) ? Else : NULL;
+                ASTNode* else_branch = NULL;
+                if (Else != NULL) {
+                    else_branch = (ASTNode*)pcc_get_value(Else, 1);
+                }
                 $$ = create_if_node(Cond, Then, else_branch);
               }
             / "while" _ Cond:Expr _ Body:ExprList {
@@ -92,19 +130,60 @@ SExpr      <- "list" {
                 $$ = create_print_node(val);
               }
 
-Term       <- '"' text:< [^"\\]* > '"' {
-                Value v = { VAL_STRING, .as.s_val = (char*)text };
-                $$ = create_literal_node(v);
-              }
-            / val:< [0-9]+ > {
-                Value v = { VAL_INT, .as.i_val = atoi(val) };
-                $$ = create_literal_node(v);
-              }
+# Terminal values and identifiers
+Term       <- StringLiteral
+            / IntegerLiteral
             / Ident
 
+# String literal with proper escape sequence handling
+StringLiteral <- '"' text:EscapedString '"' {
+                  Value v = { VAL_STRING, .as.s_val = (char*)text };
+                  $$ = create_literal_node(v);
+                }
+
+# Escape sequences: \", \\, \n, \t, \r, \f, \b
+EscapedString <- < (EscapeSeq / [^"\\])* > 
+EscapeSeq     <- '\\' ["\\\ntrfb]
+
+# Integer literal with overflow detection
+IntegerLiteral <- val:< [0-9]+ > {
+                  char* endptr;
+                  long num = strtol(val, &endptr, 10);
+                  if (*endptr != '\0' || num > INT_MAX || num < INT_MIN) {
+                      fprintf(stderr, "Error: Integer overflow or invalid number: %s\n", val);
+                      return -1;
+                  }
+                  Value v = { VAL_INT, .as.i_val = (int)num };
+                  $$ = create_literal_node(v);
+                }
+
+# Identifier: starts with letter or underscore, followed by alphanumerics/underscores
 Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > {
                 $$ = create_identifier_node(name);
               }
 
-_          <- [ \t\n\r]*
+# Parameter list for lambda: (param1 param2 ...)
+LispParamList <- first:Ident rest:(_ Ident)* {
+                   $$ = first;
+                   for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                       pcc_add_value($$, pcc_get_value(rest, i));
+                   }
+                 }
+
+# Argument list for function call: expr1 expr2 ...
+LispArgList <- first:Expr rest:(_ Expr)* {
+                 $$ = first;
+                 for(int i = 0; i < pcc_get_value_count(rest); i++) {
+                     pcc_add_value($$, pcc_get_value(rest, i));
+                 }
+               }
+
+# Whitespace: spaces, tabs, newlines, carriage returns
+# Also handles Lisp-style comments: ; to end of line
+_          <- (Whitespace / Comment)*
+
+Whitespace <- [ \t\n\r]+
+
+Comment    <- ';' [^\n]* [\n]?
+
 %%
