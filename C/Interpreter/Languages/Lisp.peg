@@ -32,7 +32,14 @@ ExprList   <- first:Expr rest:(_ Expr)* {
 Expr       <- '(' _ body:SExpr _ ')' { $$ = body; }
             / Term
 
-SExpr      <- "and" _ left:Expr _ right:Expr { $$ = create_logical_node("and", left, right); }
+SExpr      <- "list" { 
+                Value v = { VAL_ARRAY, .as.array.elements = NULL, .as.array.count = 0, .as.array.capacity = 0 };
+                $$ = create_literal_node(v);
+              }
+            / "nth" _ idx:Expr _ target:Expr { 
+                $$ = create_index_node(target, idx); 
+              }
+            / "and" _ left:Expr _ right:Expr { $$ = create_logical_node("and", left, right); }
             / "or"  _ left:Expr _ right:Expr { $$ = create_logical_node("or", left, right); }
             / "not" _ operand:Expr
             / "define" _ name:Ident _ "(" _ "lambda" _ "(" _ params:LispParamList? _ ")" _ body:ExprList _ ")" {
