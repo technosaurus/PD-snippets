@@ -17,6 +17,12 @@
 
 Program    <- _ statements:Chunk _ { $$ = statements; }
 
+Program    <- init:InitBlock? _ body:Chunk {
+                $$ = create_program_root(init, body);
+              }
+
+InitBlock  <- "init" _ list:Chunk _ "end" { $$ = list; }
+
 Chunk      <- first:Stat rest:(_ Stat)* {
                 ASTNode* block = create_block_node();
                 append_to_block(block, first);
