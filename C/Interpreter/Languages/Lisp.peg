@@ -32,7 +32,10 @@ ExprList   <- first:Expr rest:(_ Expr)* {
 Expr       <- '(' _ body:SExpr _ ')' { $$ = body; }
             / Term
 
-SExpr      <- "define" _ name:Ident _ "(" _ "lambda" _ "(" _ params:LispParamList? _ ")" _ body:ExprList _ ")" {
+SExpr      <- "and" _ left:Expr _ right:Expr { $$ = create_logical_node("and", left, right); }
+            / "or"  _ left:Expr _ right:Expr { $$ = create_logical_node("or", left, right); }
+            / "not" _ operand:Expr
+            / "define" _ name:Ident _ "(" _ "lambda" _ "(" _ params:LispParamList? _ ")" _ body:ExprList _ ")" {
                 Value f_val; f_val.type = VAL_FUNCTION;
                 f_val.as.func.body = body;
                 int count = pcc_get_value_count(params);
@@ -76,7 +79,11 @@ SExpr      <- "define" _ name:Ident _ "(" _ "lambda" _ "(" _ params:LispParamLis
                 $$ = create_print_node(val);
               }
 
-Term       <- val:< [0-9]+ > {
+Term       <- '"' text:< [^"\\]* > '"' {
+                Value v = { VAL_STRING, .as.s_val = (char*)text };
+                $$ = create_literal_node(v);
+              }
+            / val:< [0-9]+ > {
                 Value v = { VAL_INT, .as.i_val = atoi(val) };
                 $$ = create_literal_node(v);
               }
