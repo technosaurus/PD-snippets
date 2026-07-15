@@ -85,7 +85,12 @@ MathExpr   <- left:Term _ '+' _ right:MathExpr { $$ = create_binary_node('+', le
             / left:MathExpr _ '-' _ right:MathExpr { $$ = create_binary_node('-', left, right); }
             / Term
 
-Term       <- "not" _ operand:MathExpr { $$ = create_unary_node('!', operand); }
+Term       <- base:Ident _ "[" _ idx:Expr _ "]" { $$ = create_index_node(base, idx); }
+            / "{}" { 
+                Value v = { VAL_ARRAY, .as.array.elements = NULL, .as.array.count = 0, .as.array.capacity = 0 };
+                $$ = create_literal_node(v);
+              }
+            / "not" _ operand:MathExpr { $$ = create_unary_node('!', operand); }
             / '"' text:< [^"\\]* > '"' {
                 Value v = { VAL_STRING, .as.s_val = (char*)text };
                 $$ = create_literal_node(v);
