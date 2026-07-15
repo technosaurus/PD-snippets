@@ -66,6 +66,18 @@ Expr       <- left:Term _ '+' _ right:Expr { $$ = create_binary_node('+', left, 
             / left:Term _ '-' _ right:Expr { $$ = create_binary_node('-', left, right); }
             / Term
 
+Expr       <- ComparisonExpr
+
+ComparisonExpr 
+           <- left:MathExpr _ "<" _ right:ComparisonExpr { $$ = create_binary_node('<', left, right); }
+            / left:MathExpr _ ">" _ right:ComparisonExpr { $$ = create_binary_node('>', left, right); }
+            / left:MathExpr _ "==" _ right:ComparisonExpr { $$ = create_binary_node('=', left, right); }
+            / MathExpr
+
+MathExpr   <- left:Term _ '+' _ right:MathExpr { $$ = create_binary_node('+', left, right); }
+            / left:MathExpr _ '-' _ right:MathExpr { $$ = create_binary_node('-', left, right); }
+            / Term
+
 Term       <- val:< [0-9]+ > {
                 Value v = { VAL_INT, .as.i_val = atoi(val) };
                 $$ = create_literal_node(v);
