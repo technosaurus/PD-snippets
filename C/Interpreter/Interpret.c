@@ -142,6 +142,15 @@ Value execute_ast(ASTNode* node, Environment* env) {
                     res.type = VAL_INT;
                     res.as.i_val = left.as.i_val - right.as.i_val;
                 }
+            } else if (node->data.binary.op == '<' || node->data.binary.op == '>' || node->data.binary.op == '=') {
+                // Unify numbers to floats for cross-type comparison (e.g. 5 < 5.5)
+                double l = (left.type == VAL_INT) ? left.as.i_val : (left.type == VAL_FLOAT ? left.as.f_val : 0.0);
+                double r = (right.type == VAL_INT) ? right.as.i_val : (right.type == VAL_FLOAT ? right.as.f_val : 0.0);
+                
+                res.type = VAL_BOOL;
+                if (node->data.binary.op == '<')  res.as.b_val = (l < r);
+                if (node->data.binary.op == '>')  res.as.b_val = (l > r);
+                if (node->data.binary.op == '=')  res.as.b_val = (l == r); // Matches internal symbol encoding
             }
             
             // Clean up temporary tree evaluation branches
