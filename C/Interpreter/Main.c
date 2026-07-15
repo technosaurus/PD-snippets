@@ -24,6 +24,13 @@ typedef struct awk_context_tag awk_context_t;
 awk_context_t* awk_create(void* user_data);
 int awk_parse(awk_context_t* ctx, ASTNode** result);
 void awk_destroy(awk_context_t* ctx);
+
+typedef struct tcl_context_tag tcl_context_t;
+tcl_context_t* tcl_create(void* user_data);
+int tcl_parse(tcl_context_t* ctx, ASTNode** result);
+void tcl_destroy(tcl_context_t* ctx);
+
+
 void execute_polyglot_stream(ASTNode* program_ast, Environment* global_env, const char* data_file_path);
 /* =========================================================================
    1. UTILITY: FILE LOADING INTERFACE
@@ -112,6 +119,17 @@ static ASTNode* run_awk_parser(const char* source) {
     return NULL;
 }
 
+static ASTNode* run_tcl_parser(const char* source) {
+    ASTNode* root_node = NULL;
+    tcl_context_t* ctx = tcl_create((void*)source);
+    if (tcl_parse(ctx, &root_node) != 0) {
+        tcl_destroy(ctx);
+        return root_node;
+    }
+    tcl_destroy(ctx);
+    return NULL;
+}
+
 /* =========================================================================
    3. THE MAIN PROGRAM ENTRY POINT
    ========================================================================= */
@@ -137,6 +155,8 @@ int main(int argc, char* argv[]) {
         program_ast = run_lua_parser(source_code);
     } else if (strcmp(ext, ".awk") == 0) { // <-- Added AWK Route
         program_ast = run_awk_parser(source_code);
+    } else if (strcmp(ext, ".tcl") == 0) { // <-- Added Tcl Route
+        program_ast = run_tcl_parser(source_code);
     } else {
         fprintf(stderr, "Error: Unsupported language target extension '%s'.\n", ext);
         free(source_code);
