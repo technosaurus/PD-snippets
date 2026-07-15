@@ -271,6 +271,7 @@ Value execute_ast(ASTNode* node, Environment* env) {
             else if (target.type == VAL_BOOL) printf("%s\n", target.as.b_val ? "true" : "false");
             return target; // Returns evaluated values upstream
         }
+
         case NODE_FUNCTION_CALL: {
             Environment* func_env_entry = env_find(env, node->data.call.name);
             if (!func_env_entry || func_env_entry->value.type != VAL_FUNCTION) {
@@ -318,6 +319,28 @@ Value execute_ast(ASTNode* node, Environment* env) {
             free(evaluated_args);
 
             return return_val;
+        }
+
+        case NODE_INDEX: {
+            Value target = execute_ast(node->data.index.target, env);
+            Value idx = execute_ast(node->data.index.index, env);
+            Value res = null_val;
+
+            if (target.type == VAL_ARRAY && idx.type == VAL_INT) {
+                int i = idx.as.i_val;
+                // Protection boundary check for embedded environments
+                if (i >= 0 && i < target.as.array.count) {
+                    res = target.as.array.elements[i];
+                    // Duplicate strings if pulling from list bounds
+                    if (res.type == VAL_STRING && res.as.s_val) res.as.s_val = strdup(res.as.s_val);
+                } else {
+                    fprintf(stderr, "Runtime Error: Array index out of bounds.\n");
+                    exit(EXIT_FAILURE);
+                }
+            }
+            free_value(target);
+            free_value(idx);
+            return res;
         }
 
     }
