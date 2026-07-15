@@ -1,0 +1,19 @@
+%prefix "tinyc"
+%header {
+    #include "ast.h"
+}
+
+# The root node returns our shared ASTNode pointer
+Program    <- _ expr:Expr _ { $$ = expr; }
+
+Expr       <- left:Term _ '+' _ right:Expr { 
+                $$ = create_binary_node('+', left, right); 
+              }
+            / Term
+
+Term       <- val:< [0-9]+ > { 
+                Value v = { VAL_INT, .as.i_val = atoi(val) };
+                $$ = create_literal_node(v); 
+              }
+
+_          <- [ \t\n\r]*
