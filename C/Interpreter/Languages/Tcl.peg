@@ -4,6 +4,7 @@
     #include "ast.h"
     #include <string.h>
     #include <stdlib.h>
+    #include <stdint.h>
     #define PCC_GETCHAR(aux) tcl_get_next_char(aux)
 }
 
@@ -15,13 +16,39 @@
     }
     
     /* Helper to safely copy and null-terminate strings from PEG captures */
-    static char* safe_string_copy(const char* src, int len) {
+    static char* safe_string_copy(const char* src, size_t len) {
         char* dest = (char*)malloc(len + 1);
         if (dest) {
             strncpy(dest, src, len);
             dest[len] = '\0';
         }
         return dest;
+    }
+    
+    /* Process string content with escape sequences */
+    static char* process_escape_sequences(const char* text, size_t len) {
+        char* result = (char*)malloc(len + 1);
+        if (!result) return NULL;
+        
+        size_t read = 0, write = 0;
+        while (read < len) {
+            if (text[read] == '\\' && read + 1 < len) {
+                read++;
+                switch (text[read]) {
+                    case 'n': result[write++] = '\n'; break;
+                    case 't': result[write++] = '\t'; break;
+                    case 'r': result[write++] = '\r'; break;
+                    case '\\': result[write++] = '\\'; break;
+                    case '"': result[write++] = '"'; break;
+                    default: result[write++] = text[read]; break;
+                }
+                read++;
+            } else {
+                result[write++] = text[read++];
+            }
+        }
+        result[write] = '\0';
+        return result;
     }
 }
 
@@ -99,7 +126,7 @@ ComparisonExpr
 ComparisonRest <- _ op:CompOp _ right:AddExpr { $$.a = op; $$.b = (void*)right; }
 
 CompOp     <- "==" { $$ = (void*)(intptr_t)'='; }
-            / "!=" { $$ = (void*)(intptr_t)'N'; }
+            / "!=" { $$ = (void*)(intptr_t)'!'; }
             / "<=" { $$ = (void*)(intptr_t)'L'; }
             / ">=" { $$ = (void*)(intptr_t)'G'; }
             / "<" { $$ = (void*)(intptr_t)'<'; }
@@ -148,18 +175,19 @@ UnaryExpr  <- '!' _ expr:UnaryExpr { $$ = create_unary_node('!', expr); }
 # In Tcl, raw strings are variables if prefixed with a $, or literals if standalone/quoted
 Term       <- '(' _ expr:Expr _ ')' { $$ = expr; }
             / '$' name:Ident { $$ = name; }
-            / IntLiteral
             / DoubleLiteral
+            / IntLiteral
             / StringLiteral
             / SingleQuotedString
 
-# Integer literal: 42, 0, -5 (handled by UnaryExpr)
+# Integer literal: 42, 0 (negative handled by UnaryExpr)
 IntLiteral <- val:< [0-9]+ > { 
                 Value v = { VAL_INT, .as.i_val = atoi(val) }; 
                 $$ = create_literal_node(v);
               }
 
 # Floating point literal: 3.14, 0.5
+# Must try DoubleLiteral before IntLiteral to avoid matching just the integer part
 DoubleLiteral <- val:< [0-9]+ '.' [0-9]+ > {
                 Value v = { VAL_FLOAT, .as.f_val = atof(val) }; 
                 $$ = create_literal_node(v);
@@ -171,10 +199,14 @@ StringLiteral <- '"' text:StringContent '"' {
                 $$ = create_literal_node(v);
               }
 
-StringContent <- content:< (EscapeSeq / [^"\\])* > {
-                /* Safe string copy to ensure null termination */
-                $$ = (void*)safe_string_copy(content, strlen(content));
+# String content capturing raw characters; escape processing happens in wrapper
+StringContent <- content:< (EscapeCharSeq / [^"\\])* > {
+                /* Process escape sequences and copy */
+                $$ = (void*)process_escape_sequences(content, strlen(content));
               }
+
+# Escape character sequence without producing output here
+EscapeCharSeq <- '\\' [ntr"\\]
 
 # Single-quoted strings (no escapes)
 SingleQuotedString <- '\'' text:< [^']* > '\'' {
@@ -182,13 +214,6 @@ SingleQuotedString <- '\'' text:< [^']* > '\'' {
                 Value v = { VAL_STRING, .as.s_val = str }; 
                 $$ = create_literal_node(v);
               }
-
-EscapeSeq  <- '\\' ( '"' { $$ = "\""; }
-                   / '\\' { $$ = "\\"; }
-                   / 'n' { $$ = "\n"; }
-                   / 't' { $$ = "\t"; }
-                   / 'r' { $$ = "\r"; }
-                   )
 
 Ident      <- name:< [a-zA-Z_][a-zA-Z0-9_]* > { $$ = create_identifier_node(name); }
 
