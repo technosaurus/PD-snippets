@@ -57,4 +57,45 @@ clang -Ofast -flto=thin -fstrict-aliasing -fomit-frame-pointer \
       -fno-semantic-interposition input.c -o output
 ```
 
+```sh
+#compile llvm ir to tiny binary
+clang -x ir - \
+    -Oz -flto=thin -fno-ident \
+    -fassociative-math -fno-signed-zeros -freciprocal-math \
+    -ffinite-math-only -fno-trapping-math -ffp-contract=fast \
+    -ffunction-sections -fdata-sections \
+    -mllvm -enable-machine-outliner=always \
+    -mllvm -enable-gvn-hoist=1 -mllvm -enable-gvn-sink=1 \
+    -mllvm -inline-threshold=5 \
+    -march=native -s \
+    -Wl,--gc-sections -Wl,--icf=all \
+    -o "$OUT_FILE"
+
+# Append this to the tail of your build environment to overwrite upstream Makefiles
+CFLAGS="-c -emit-llvm \
+-march=x86-64 -mno-sse3 -mno-ssse3 -mno-sse4.1 -mno-sse4.2 -mno-avx -mno-avx2 -mno-avx512f \
+-Oz -finline-small-functions -mllvm -inline-threshold=25 \
+-fvectorize -fslp-vectorize -fno-unroll-loops -fno-vectorize-loops-partially -mllvm -force-vector-interleave=1 \
+-fno-exceptions -fno-rtti -fno-asynchronous-unwind-tables \
+-fassociative-math -fno-signed-zeros -freciprocal-math -ffinite-math-only -fno-trapping-math -ffp-contract=fast \
+-ffunction-sections -fdata-sections -fno-ident -Xclang -opaque-pointers"
+
+
+#CFLAGS to enable compatible bitcode
+# --- 1. CORE BITCODE EMISSION PASS ---
+-c -emit-llvm \
+
+# --- 2. THE UPSTREAM OVERRIDE BLOCK (Neutralizes problematic flags) ---
+-march=x86-64 -mno-sse3 -mno-ssse3 -mno-sse4.1 -mno-sse4.2 -mno-avx -mno-avx2 -mno-avx512f \
+-O3 -fvectorize -fslp-vectorize \
+-fno-exceptions -fno-rtti -fno-asynchronous-unwind-tables \
+
+# --- 3. EXPLICIT MATHEMATHICS COMPONENTS ---
+-fassociative-math -fno-signed-zeros -freciprocal-math \
+-ffinite-math-only -fno-trapping-math -ffp-contract=fast \
+
+# --- 4. STRUCTURAL SECTIONS & CLEANUP ---
+-ffunction-sections -fdata-sections -fno-ident \
+-Xclang -opaque-pointers
+```
 
