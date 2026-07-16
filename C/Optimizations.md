@@ -97,5 +97,76 @@ CFLAGS="-c -emit-llvm \
 # --- 4. STRUCTURAL SECTIONS & CLEANUP ---
 -ffunction-sections -fdata-sections -fno-ident \
 -Xclang -opaque-pointers
+
+#to build only static llc for compiling bc
+cmake -G Ninja ../llvm \
+  -DCMAKE_BUILD_TYPE=MinSizeRel \
+  -DLLVM_TARGETS_TO_BUILD="X86" \
+  -DLLVM_BUILD_TOOLS=ON \
+  -DLLVM_BUILD_UTILS=OFF \
+  -DLLVM_BUILD_RUNTIME=OFF \
+  -DLLVM_BUILD_RUNTIMES=OFF \
+  -DLLVM_INCLUDE_TESTS=OFF \
+  -DLLVM_INCLUDE_EXAMPLES=OFF \
+  -DLLVM_INCLUDE_BENCHMARKS=OFF \
+  -DLLVM_INCLUDE_DOCS=OFF \
+  -DLLVM_ENABLE_BINDINGS=OFF \
+  -DLLVM_ENABLE_UNWIND_TABLES=OFF \
+  -DLLVM_ENABLE_BACKTRACES=OFF \
+  -DLLVM_ENABLE_TERMINFO=OFF \
+  -DLLVM_ENABLE_ZLIB=OFF \
+  -DLLVM_ENABLE_ZSTD=OFF \
+  -DLLVM_ENABLE_LIBXML2=OFF \
+  -DLLVM_BUILD_STATIC=ON \
+  -DLINK_POLLY_INTO_TOOLS=OFF \
+  -DCMAKE_EXE_LINKER_FLAGS="-static"
+
 ```
+
+
+```c++
+// For combining llc and ld
+#include <string>
+#include <cstring>
+#include <iostream>
+
+// Declare the standard entry points exported by the LLVM driver libraries
+extern "C" int llvm_llc_main(int argc, char **argv);
+extern "C" int lld_main(int argc, char **argv);
+
+int main(int argc, char **argv) {
+    if (argc < 1) return 1;
+
+    // Isolate the base filename from the execution path
+    std::string program_name = argv[0];
+    size_t last_slash = program_name.find_last_of("/");
+    if (last_slash != std::string::npos) {
+        program_name = program_name.substr(last_slash + 1);
+    }
+
+    // Direct multiplex mapping logic (BusyBox Style)
+    if (program_name == "llc") {
+        return llvm_llc_main(argc, argv);
+    } 
+    else if (program_name == "ld" || program_name == "ld.lld") {
+        // Enforce the standard ELF configuration target vector internally
+        return lld_main(argc, argv);
+    }
+
+    // Direct fallback interface if executed directly instead of via a symlink
+    if (argc > 1) {
+        std::string command = argv[1];
+        if (command == "llc") {
+            return llvm_llc_main(argc - 1, argv + 1);
+        } else if (command == "ld" || command == "ld.lld") {
+            return lld_main(argc - 1, argv + 1);
+        }
+    }
+
+    std::cerr << "Puppy Package Manager Multi-Call Backend Compiler Tool\n";
+    std::cerr << "Usage: Symlink as 'llc' or 'ld', or run: pman-cc [llc|ld] [args...]\n";
+    return 1;
+}
+```
+
 
