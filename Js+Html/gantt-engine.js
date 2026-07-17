@@ -41,6 +41,55 @@ document.getElementById('chart-container').addEventListener('contextmenu', funct
 // Close popup instantly on outside target blur events
 document.addEventListener('click', () => menuEl.style.display = 'none');
 
+// File Sync Logic: Serialization Export Driver
+function exportProjectJSON() {
+    // Stringify array data with tab styling for high readability
+    const dataStr = JSON.stringify(tasks, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.href = url;
+    downloadAnchor.download = 'gantt_project_data.json';
+    
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    document.body.removeChild(downloadAnchor);
+    URL.revokeObjectURL(url);
+}
+
+// File Sync Logic: Deserialization Import Driver
+function importProjectJSON(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const parsedData = JSON.parse(e.target.result);
+            
+            // Basic data schema structure sanity check validation
+            if (!Array.isArray(parsedData)) {
+                throw new Error("Invalid structure formatting: JSON file must contain a task array list matrix.");
+            }
+
+            // Flush system cache memory, write new records, and refresh the UI layout
+            tasks.length = 0; 
+            tasks.push(...parsedData);
+            
+            // Draw chart using non-archived items while retaining full cache constraints
+            const viewableTasks = tasks.filter(t => !t.isHiddenArchived);
+            container.innerHTML = generateGantt(viewableTasks, config);
+            
+            console.log(`🚀 Project file synchronized successfully! Loaded ${tasks.length} total nodes.`);
+        } catch (error) {
+            alert("Error loading backup: " + error.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+
 // Core Dependency-Safe Soft Delete Logic Action
 function triggerSoftDelete() {
     if (!activeMenuTaskId) return;
