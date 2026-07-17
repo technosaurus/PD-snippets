@@ -162,6 +162,47 @@ function generateGantt(tasks, cfg) {
     return `<svg id="gantt-svg" xmlns="http://w3.org" viewBox="0 0 ${svgWidth} ${svgHeight}">${html}</svg>`;
 }
 
+// Dynamic Field Selector Helper
+function toggleFormFields() {
+    const isMilestone = document.getElementById('form-type').value === 'milestone';
+    document.getElementById('form-end').style.display = isMilestone ? 'none' : 'block';
+    document.getElementById('form-end').required = !isMilestone;
+    document.getElementById('form-prog').style.display = isMilestone ? 'none' : 'block';
+}
+
+// Form Submission Event Interceptor
+function handleTaskSubmit(e) {
+    e.preventDefault();
+    
+    const type = document.getElementById('form-type').value;
+    const depsValue = document.getElementById('form-deps').value.trim();
+    
+    // Auto-generate a clean incremental ID tracking number
+    const newId = "t" + (tasks.length + 1);
+
+    const newTask = {
+        id: newId,
+        type: type,
+        name: document.getElementById('form-name').value.trim(),
+        start: document.getElementById('form-start').value,
+        color: type === 'milestone' ? '#ef4444' : '#3b82f6',
+        dependencies: depsValue ? depsValue.split(',').map(s => s.trim()) : undefined
+    };
+
+    if (type === 'task') {
+        newTask.end = document.getElementById('form-end').value;
+        newTask.progress = parseFloat(document.getElementById('form-prog').value || 0) / 100;
+    }
+
+    // Push into system memory array cache and re-render canvas matrix lines
+    tasks.push(newTask);
+    container.innerHTML = generateGantt(tasks, config);
+    
+    // Reset structural form content elements cleanly
+    document.getElementById('form-name').value = '';
+    document.getElementById('form-deps').value = '';
+}
+
 // 5. Tooltip Controllers
 const tt = document.getElementById('tooltip');
 const container = document.getElementById('chart-container');
