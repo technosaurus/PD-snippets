@@ -18,6 +18,18 @@
         .gantt-tooltip { position: absolute; background: rgba(15, 23, 42, 0.95); color: #fff; padding: 8px 12px; font-size: 12px; border-radius: 6px; pointer-events: none; opacity: 0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); z-index: 100; line-height: 1.4; }
         .interactive-row { pointer-events: bounding-box; cursor: pointer; }
         .interactive-row:hover .row-bg { fill: #f8fafc; }
+        /* Form Layout Box Dashboard Constraints */
+.form-container { background: #f8fafc; padding: 16px; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 20px; }
+.form-container h3 { margin: 0 0 12px 0; font-size: 14px; text-transform: uppercase; color: #475569; letter-spacing: 0.5px; }
+.form-grid { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.form-grid input, .form-grid select { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; color: #1e293b; background: white; min-width: 140px; flex: 1; }
+.form-grid input:focus, .form-grid select:focus { outline: 2px solid #2563eb; outline-offset: -1px; }
+.form-grid button { flex-grow: 0; padding: 9px 20px; }
+
+/* Hide insertion inputs during a native print sequence */
+@media print {
+    .form-container, #task-form { display: none !important; }
+}
 
         /* Print Settings optimization overrides */
         @media print {
@@ -40,6 +52,25 @@
             <button class="btn" onclick="downloadSVG()">Export SVG File</button>
         </div>
     </div>
+    <!-- Isolated Task Insertion Form Markup -->
+<div class="form-container">
+    <h3>➕ Add Project Component</h3>
+    <form id="task-form" onsubmit="handleTaskSubmit(event)">
+        <div class="form-grid">
+            <input type="text" id="form-name" placeholder="Task or Milestone Name" required>
+            <select id="form-type" onchange="toggleFormFields()">
+                <option value="task">Standard Task Task</option>
+                <option value="milestone">Milestone Marker</option>
+            </select>
+            <input type="date" id="form-start" value="2026-07-20" required>
+            <input type="date" id="form-end" value="2026-07-24">
+            <input type="number" id="form-prog" placeholder="Prog % (0-100)" min="0" max="100" value="0">
+            <input type="text" id="form-deps" placeholder="Predecessors (e.g. t1, t2)">
+            <button type="submit" class="btn">Add to Timeline</button>
+        </div>
+    </form>
+</div>
+    
     <div id="chart-container"></div>
 </div>
 
