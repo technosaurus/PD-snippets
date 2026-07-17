@@ -126,4 +126,88 @@ function downloadSVG() {
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
+function computeAndPrintCriticalPath(tasksData) {
+    // 1. Prepare working data dictionary
+    const nodes = {};
+    tasksData.forEach(t => {
+        // Calculate raw duration in days
+        const start = new Date(t.start + 'T00:00:00');
+        const end = t.end ? new Date(t.end + 'T00:00:00') : start;
+        const duration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+
+        nodes[t.id] = {
+            id: t.id,
+            name: t.name,
+            duration: t.type === 'milestone' ? 0 : duration,
+            predecessors: t.dependencies || [],
+            successors: [],
+            ES: 0, EF: 0, LS: 0, LF: 0
+        };
+    });
+
+    // Map structural inverse successor relationships
+    Object.values(nodes).forEach(node => {
+        node.predecessors.forEach(predId => {
+            if (nodes[predId]) nodes[predId].successors.push(node.id);
+        });
+    });
+
+    // Helper: Topological Sort to handle arbitrary task entry order safely
+    const visited = new Set();
+    const orderedIds = [];
+    function visit(id) {
+        if (visited.has(id)) return;
+        visited.add(id);
+        nodes[id].predecessors.forEach(visit);
+        orderedIds.push(id);
+    }
+    Object.keys(nodes).forEach(visit);
+
+    // 2. FORWARD PASS: Determine Earliest Start (ES) & Earliest Finish (EF)
+    orderedIds.forEach(id => {
+        const node = nodes[id];
+        if (node.predecessors.length > 0) {
+            node.ES = Math.max(...node.predecessors.map(pId => nodes[pId].EF));
+        } else {
+            node.ES = 0;
+        }
+        node.EF = node.ES + node.duration;
+    });
+
+    // 3. BACKWARD PASS: Determine Latest Finish (LF) & Latest Start (LS)
+    const totalProjectLength = Math.max(...Object.values(nodes).map(n => n.EF));
+    
+    // Process in reverse topological order
+    [...orderedIds].reverse().forEach(id => {
+        const node = nodes[id];
+        if (node.successors.length > 0) {
+            node.LF = Math.min(...node.successors.map(sId => nodes[sId].LS));
+        } else {
+            node.LF = totalProjectLength;
+        }
+        node.LS = node.LF - node.duration;
+    });
+
+    // 4. EXTRACT CRITICAL PATH: Slack/Float evaluates to 0
+    const criticalNodes = Object.values(nodes).filter(node => (node.LS - node.ES) === 0);
+    
+    // Sort chronological order by Earliest Start timestamps
+    criticalNodes.sort((a, b) => a.ES - b.ES);
+
+    // 5. PRINT OUTPUT DIAGNOSTICS TO CONSOLE
+    console.log("==================================================");
+    console.log(`CRITICAL PATH CALCULATION ENGINE (Total Duration: ${totalProjectLength} days)`);
+    console.log("==================================================");
+    criticalNodes.forEach((node, i) => {
+        const arrow = i < criticalNodes.length - 1 ? " ➔ " : "";
+        console.log(`[${node.id}] "${node.name}" (Duration: ${node.duration}d)${arrow}`);
+    });
+    console.log("==================================================");
+
+    return criticalNodes.map(n => n.id);
+}
+
+// Automatically trigger calculation sequence on payload runtime execution
+computeAndPrintCriticalPath(tasks);
+
 container.innerHTML = generateGantt(tasks, config);
