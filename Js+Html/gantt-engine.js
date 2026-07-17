@@ -183,7 +183,7 @@ function generateGantt(tasks, cfg) {
         let attrs = `data-name="${t.name}" data-start="${t.start}" data-type="${t.type}"`;
         if (t.type === "task") attrs += ` data-end="${t.end}" data-prog="${Math.round(t.progress * 100)}"`;
 
-        html += `<g class="interactive-row" ${attrs} onmousemove="showTooltip(event)" onmouseleave="hideTooltip()">`;
+        html += `<g class="interactive-row" data-id="${t.id}" ${attrs} onmousemove="showTooltip(event)" onmouseleave="hideTooltip()">`;
         html += `<rect width="${svgWidth}" height="${cfg.rowHeight}" y="${rY}" fill="transparent" class="row-bg"/>`;
         html += `<line x1="0" y1="${rY}" x2="${svgWidth}" y2="${rY}" class="grid-line" />`;
         
