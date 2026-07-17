@@ -38,6 +38,11 @@
 @media print {
     .form-container, #task-form { display: none !important; }
 }
+/* Prevent storage controls from appearing on hard copy documents */
+@media print {
+    .file-actions { display: none !important; }
+}
+        
 
         /* Print Settings optimization overrides */
         @media print {
@@ -55,6 +60,12 @@
 <div class="card">
     <div class="header">
         <h1>Project Master Schedule</h1>
+        <!-- Isolated JSON File Synchronization Actions Layout -->
+<div class="file-actions" style="display: flex; gap: 12px; margin-bottom: 16px; align-items: center; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0;">
+    <span style="font-size: 13px; font-weight: 600; color: #475569;">💾 Project Sync:</span>
+    <input type="file" id="json-upload" accept=".json" onchange="importProjectJSON(event)" style="font-size: 13px;">
+    <button class="btn btn-secondary" onclick="exportProjectJSON()" style="padding: 6px 12px; font-size: 13px;">Save Data File</button>
+</div>
         <div class="actions-group">
             <button class="btn btn-secondary" onclick="window.print()">Print Chart</button>
             <button class="btn" onclick="downloadSVG()">Export SVG File</button>
