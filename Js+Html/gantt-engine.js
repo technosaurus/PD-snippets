@@ -16,6 +16,50 @@ const config = { labelWidth: 190, dayWidth: 40, rowHeight: 48, paddingTop: 60, p
 const parseDate = (str) => new Date(str + 'T00:00:00');
 const getDaysBetween = (s, e) => Math.ceil((e - s) / (1000 * 60 * 60 * 24)) + 1;
 const formatDate = (d) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
+// Active Menu Pointer State Tracker Variables
+let activeMenuTaskId = null;
+const menuEl = document.getElementById('actions-menu');
+
+// Bind Context Right-Click Trigger Interception
+document.getElementById('chart-container').addEventListener('contextmenu', function(e) {
+    const rowGroup = e.target.closest('.interactive-row');
+    if (!rowGroup) return;
+    
+    e.preventDefault(); // Suppress generic browser utility menu
+    
+    // Scrape Task DOM Node Metadata Map Properties
+    // Note: To make this match, ensure your generateGantt loop outputs data-id="${t.id}" on the <g> row wrapper
+    activeMenuTaskId = rowGroup.getAttribute('data-id') || tasks[rowGroup.rowIndex - 1]?.id; 
+    
+    // Position menu exactly over cursor position offsets
+    const rect = container.getBoundingClientRect();
+    menuEl.style.left = `${e.clientX - rect.left + 5}px`;
+    menuEl.style.top = `${e.clientY - rect.top + 5}px`;
+    menuEl.style.display = 'block';
+});
+
+// Close popup instantly on outside target blur events
+document.addEventListener('click', () => menuEl.style.display = 'none');
+
+// Core Dependency-Safe Soft Delete Logic Action
+function triggerSoftDelete() {
+    if (!activeMenuTaskId) return;
+    
+    const targetIndex = tasks.findIndex(t => t.id === activeMenuTaskId);
+    if (targetIndex === -1) return;
+    
+    const targetTask = tasks[targetIndex];
+    
+    // Soft conversion: Max progress and inject hidden filter variable flags
+    if (targetTask.type === 'task') targetTask.progress = 1.0;
+    targetTask.isHiddenArchived = true;
+    
+    console.log(`📦 Archived [${targetTask.id}] safely. Preserving timeline geometry constraints.`);
+    
+    // Filter out rows without removing their core database model parameters from calculation loops
+    const viewableTasks = tasks.filter(t => !t.isHiddenArchived);
+    container.innerHTML = generateGantt(viewableTasks, config);
+}
 
 // 3. Mathematical Engine: Critical Path Solver Method (CPM)
 function getCriticalPathIds(tasksData) {
