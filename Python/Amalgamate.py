@@ -132,7 +132,7 @@ def extract_and_sort_c_file(source_file_path):
     # 3. Output the sorted document pipeline
     print("/* --- DEFINES --- */")
     print("\n\n".join(buckets["defines"]))
-    
+    #TODO Add forward declarations and global variables
     print("\n/* --- TYPEDEFS --- */")
     print("\n\n".join(buckets["typedefs"]))
     
