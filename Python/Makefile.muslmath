@@ -1,0 +1,50 @@
+#TODO
+CC = gcc
+CFLAGS = -O3 -fPIC -I./musl/src/internal -I./musl/include -I./musl/arch/x86_64
+LDFLAGS = -shared
+
+# Collect several hot target math functions from the musl codebase
+MATH_SRCS = musl/src/math/sin.c musl/src/math/cos.c musl/src/math/sqrt.c musl/src/math/pow.c
+ASM_INTERMEDIATES = $(MATH_SRCS:.c=.s)
+ASM_OPTIMIZED = $(MATH_SRCS:.c=_opt.s)
+OBJS_OPTIMIZED = $(MATH_SRCS:.c=_opt.o)
+
+HEADER_OUTPUT = include/math_opt.h
+
+all: init_header libmusl_math_opt.so client_app
+
+# Download musl components locally if they don't exist
+musl:
+	git clone --depth 1 https://musl-libc.org
+
+init_header: musl
+	@mkdir -p include
+	@echo "#ifndef MUSL_MATH_OPT_H" > $(HEADER_OUTPUT)
+	@echo "#define MUSL_MATH_OPT_H" >> $(HEADER_OUTPUT)
+	@echo '#include "../musl/include/math.h"' >> $(HEADER_OUTPUT)
+	@echo "/* Auto-generated zero-overhead fast-register shortcuts */" >> $(HEADER_OUTPUT)
+
+# Step 1: Compile standard musl math logic code down to assembly (.s)
+%.s: %.c
+	$(CC) $(CFLAGS) -S -o $@ $<
+
+# Step 2: Route through our text compiler modifier script
+%_opt.s: %.s
+	python3 MuslMath.py $< $@ $(HEADER_OUTPUT)
+
+# Step 3: Turn the rewritten assembly files into standard binary object blobs
+%_opt.o: %_opt.s
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+# Step 4: Link object blobs into the optimized shared object file (.so)
+libmusl_math_opt.so: $(OBJS_OPTIMIZED)
+	$(CC) $(LDFLAGS) -o $@ $^
+	@echo "#endif" >> $(HEADER_OUTPUT)
+
+# Compile user application leveraging the optimized headers and linking against the tailored .so
+client_app: src/main.c libmusl_math_opt.so
+	$(CC) -O3 -I./include -o client_app src/main.c -L. -lmusl_math_opt -lm
+
+clean:
+	rm -f libmusl_math_opt.so client_app $(HEADER_OUTPUT)
+	rm -f musl/src/math/*.s musl/src/math/*.o
