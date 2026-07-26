@@ -1,0 +1,26 @@
+CC = gcc
+CFLAGS = -m32 -march=i486 -Os -fPIC -ffunction-sections -fdata-sections
+LDFLAGS = -m32 -shared -Wl,--gc-sections -Wl,--icf=all
+
+all: client_app
+
+# Stage 1: Generate initial raw assembly code string assets (-S)
+src/library_core.s: src/library_core.c
+	$(CC) $(CFLAGS) -S -o $@ $<
+
+# Stage 2: Execute our Unified Script Pass to process register alignment, stack stripping,
+# array streaming conversions, and multi-return structuring simultaneously.
+src/library_core_optimized.s include/zero_overhead_master.h: src/library_core.s
+	@mkdir -p include
+	python3 scripts/unified_asm_optimizer.py src/library_core.s src/library_core_optimized.s include/zero_overhead_master.h
+
+# Stage 3: Direct compilation and deduplication of the optimized assembly file straight into the .so
+libmusl_custom.so: src/library_core_optimized.s
+	$(CC) $(LDFLAGS) -o $@ $<
+
+# Stage 4: Build client binaries with zero calling-boundary overhead
+client_app: src/main.c include/zero_overhead_master.h libmusl_custom.so
+	$(CC) $(CFLAGS) -I./include -o client_app src/main.c -L. -lmusl_custom
+
+clean:
+	rm -rf *.so src/*.o src/*.s client_app include/
