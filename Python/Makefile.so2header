@@ -1,0 +1,22 @@
+CC = gcc
+CFLAGS = -O3 -fPIC
+LDFLAGS = -shared
+
+all: client_app
+
+# 1. Compile the Shared Library Binary
+libfoobar.so: src/library_logic.o
+	$(CC) $(LDFLAGS) -o $@ $^
+
+# 2. The Auto-Generation Target hook: Dependent entirely on the newly updated binary .so file
+include/auto_optimized_boundaries.h: libfoobar.so
+	@mkdir -p include
+	python3 so2header++.py libfoobar.so include/auto_optimized_boundaries.h
+
+# 3. Compile the Client Application: Explicitly depends on the newly optimized header file 
+client_app: src/main.c include/auto_optimized_boundaries.h
+	$(CC) $(CFLAGS) -I./include -o client_app src/main.c -L. -lfoobar
+
+clean:
+	rm -rf *.so src/*.o client_app include/
+  
