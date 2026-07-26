@@ -1,6 +1,111 @@
 import * as tjs from 'tjs'; 
 import * as lvgl from 'lvgl'; // Assumes LVGL v9 bindings
+import { LibavDecoder } from 'native_bindings'; // The compiled C extension bridge module
 
+class LVGLRenderer {
+    constructor(parsedDOM) {
+        this.dom = parsedDOM;
+        this.globalStyles = {};
+    }
+
+    render() {
+        const screen = lvgl.scr_act();
+        const body = lvgl.obj_create(screen);
+        body.set_size(lvgl.pct(100), lvgl.pct(100));
+        body.set_flex_flow(lvgl.FLEX_FLOW_COLUMN);
+        
+        this.dom.children.forEach(child => this.buildWidget(child, body));
+    }
+
+    buildWidget(node, parentObj) {
+        if (node.type === 'text') {
+            if (!node.content) return;
+            const lbl = lvgl.label_create(parentObj);
+            lbl.set_text(node.content);
+            return;
+        }
+
+        let currentLvObj = null;
+
+        // Unified Asset Pipeline handling: <img> and <video> tags
+        if (node.tagName === 'img' || node.tagName === 'video') {
+            const src = node.attributes.src;
+            const isVideo = node.tagName === 'video';
+            const autoplay = node.attributes.autoplay !== undefined;
+
+            // Instantiate an efficient layout Canvas frame placeholder
+            currentLvObj = lvgl.canvas_create(parentObj);
+            
+            if (src) {
+                // Determine target dimensions explicitly from layout parameters or fall back to defaults
+                const w = parseInt(node.attributes.width || 320);
+                const h = parseInt(node.attributes.height || 240);
+                
+                this.processLibavMediaStream(src, currentLvObj, w, h, isVideo, autoplay);
+            }
+        } else if (node.tagName === 'svg') {
+            currentLvObj = lvgl.canvas_create(parentObj);
+            this.renderVectorSVG(node, currentLvObj);
+        } else if (['p', 'h1', 'h2', 'span'].includes(node.tagName)) {
+            currentLvObj = lvgl.label_create(parentObj);
+            const textChild = node.children.find(c => c.type === 'text');
+            if (textChild) currentLvObj.set_text(textChild.content);
+        } else {
+            currentLvObj = lvgl.obj_create(parentObj);
+        }
+
+        if (currentLvObj) {
+            this.applyElementStyles(node, currentLvObj);
+            if (!['svg', 'img', 'video', 'p', 'h1', 'h2', 'span'].includes(node.tagName)) {
+                node.children.forEach(child => this.buildWidget(child, currentLvObj));
+            }
+        }
+    }
+
+    // Unified decoder processor managing both static frames and video playback loops
+    processLibavMediaStream(sourcePath, canvasObj, width, height, isVideo, shouldAutoplay) {
+        canvasObj.set_size(width, height);
+
+        // Instantiate native Libav C Context for decoding any file type (PNG, JPG, WEBP, AVIF, MP4, MKV)
+        const decoder = new LibavDecoder(sourcePath, width, height);
+
+        const renderNextFrame = () => {
+            const rawFrameBuffer = decoder.nextFrame();
+            if (rawFrameBuffer) {
+                // Map uncompressed ARGB data onto hardware canvas layer
+                const uint8View = new Uint8Array(rawFrameBuffer);
+                canvasObj.set_buffer(uint8View, width, height, lvgl.COLOR_FORMAT_ARGB8888);
+                return true;
+            }
+            return false;
+        };
+
+        // Execution path A: Static image configuration
+        if (!isVideo) {
+            renderNextFrame(); // Decode exactly once for flat file representations
+            return;
+        }
+
+        // Execution path B: Streaming dynamic video loop execution
+        if (!shouldAutoplay) return;
+
+        const playbackTimer = setInterval(() => {
+            const hasMoreFrames = renderNextFrame();
+            if (!hasMoreFrames) {
+                clearInterval(playbackTimer); // Kill sequence looping upon file termination
+                console.log(`[Libav System] Video playback ended for source: ${sourcePath}`);
+            }
+        }, 1000 / 24); // Locks rendering update sequencing tightly around a 24 FPS target pace
+
+        // Clean up internal instances safely to prevent memory leaks if container elements drop out of DOM scope
+        canvasObj.add_event_cb((e) => {
+            if (lvgl.event_get_code(e) === lvgl.EVENT_DELETE) {
+                clearInterval(playbackTimer);
+                decoder.destroy(); // Free underlying native FFmpeg contexts via C wrapper hooks
+            }
+        }, lvgl.EVENT_DELETE, null);
+    }
+}
 // ============================================================================
 // 1. ROBUST MINI HTML & CSS PARSER (QuickJS Compatible)
 // ============================================================================
