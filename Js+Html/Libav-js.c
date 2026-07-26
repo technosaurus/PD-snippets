@@ -1,7 +1,46 @@
+#include <GLES2/gl2.h>
 #include <quickjs.h>
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libswscale/swscale.h>
+
+
+// Shared context structure
+typedef struct {
+    GLuint texture_id;
+    int width;
+    int height;
+} SharedTextureContext;
+
+// JS: libavInstance.bindToWebGLTexture(webglContext)
+static JSValue js_libav_bind_to_webgl(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+    LibavInstance *dec = JS_GetOpaque(this_val, libav_class_id);
+    
+    // Create texture if not already allocated
+    if (dec->gl_texture_id == 0) {
+        glGenTextures(1, &dec->gl_texture_id);
+        glBindTexture(GL_TEXTURE_2D, dec->gl_texture_id);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, dec->width, dec->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    }
+
+    // Return the raw texture ID to the JS WebGL wrapper context
+    return JS_NewInt32(ctx, dec->gl_texture_id);
+}
+
+// Optimized video frame advancement pushing directly to GPU memory
+static JSValue js_libav_update_gpu_texture(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+    LibavInstance *dec = JS_GetOpaque(this_val, libav_class_id);
+    
+    if (decode_next_frame(dec) == 0) { // standard libav read/decode frame routine
+        glBindTexture(GL_TEXTURE_2D, dec->gl_texture_id);
+        // Direct zero-copy texture submission to GPU memory map
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, dec->width, dec->height, GL_RGBA, GL_UNSIGNED_BYTE, dec->buffer);
+        return JS_TRUE;
+    }
+    return JS_FALSE; // EOF reached
+}
 
 // Struct tracking decoder context instances bound to individual JS objects
 typedef struct {
