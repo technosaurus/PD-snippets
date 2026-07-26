@@ -50,14 +50,27 @@ def rename_local_variables_in_function(function_node, raw_lines):
     
     for token in tokens:
         token_text = token.spelling
+
+        # Inside your token-replacement sweep loop:
+        if token.kind == clang.cindex.TokenKind.IDENTIFIER and token.spelling in local_var_map:
+        # Query the semantic cursor directly beneath this specific token
+            token_cursor = token.cursor 
+    
+        # EXCLUSION 1: Skip if this token is actually a struct/union field reference (e.g., variable.field)
+        if token_cursor.kind == clang.cindex.CursorKind.MEMBER_REF_EXPR:
+            output_chunks.append(token.spelling)
         
-        # Check if this token is a variable name we marked for compression minification
-        if token.kind == clang.cindex.TokenKind.IDENTIFIER and token_text in local_var_map:
-            # Replace with our minimized variable name
-            output_chunks.append(local_var_map[token_text])
-        else:
-            output_chunks.append(token_text)
-            
+        # EXCLUSION 2: Skip if the token resolves straight to a struct field definition
+        elif token_cursor.kind == clang.cindex.CursorKind.FIELD_DECL:
+            output_chunks.append(token.spelling)
+        
+        # SAFE TO RENAME: Only modify if it is a genuine local reference or parameter reference
+        elif token_cursor.kind in [clang.cindex.CursorKind.DECL_REF_EXPR, clang.cindex.CursorKind.PARM_DECL]:
+            output_chunks.append(local_var_map[token.spelling])
+        
+        else: # Fallback safeguard for ambiguous macros/tokens
+            output_chunks.append(token.spelling)
+
         # Optional: Add spacing rules so tokens don't merge illegally (e.g., 'int' and 'a' -> 'inta')
         # A simple trailing space for keywords/identifiers prevents compilation merging.
         if token.kind in [clang.cindex.TokenKind.KEYWORD, clang.cindex.TokenKind.IDENTIFIER]:
