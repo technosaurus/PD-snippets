@@ -155,6 +155,7 @@ def run_unified_optimization_pass(input_s_path, output_s_path, output_h_path):
             ret_type = "multi_return_t" if len(outputs_sorted) > 1 else "unsigned long"
             
             h_out.write(f"static inline {ret_type} zero_overhead_{f_name}({args}) {{\n")
+            #h_out.write(f"\tif (__builtin_constant_p({args})) {return __builtin_{f_name}({args});}"
             if len(outputs_sorted) > 1:
                 h_out.write("    multi_return_t result;\n")
                 
