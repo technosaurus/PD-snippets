@@ -1,0 +1,25 @@
+CC = gcc
+CFLAGS = -O3 -fPIC
+LDFLAGS = -shared
+
+all: client_app
+
+# Stage 1: Force the compiler to stop at assembly emitting generation (-S)
+src/library_logic.s: src/library_logic.c
+	$(CC) $(CFLAGS) -S -o $@ $<
+
+# Stage 2: Modify intermediate assembly in place and write the accompanying optimized C Header file
+src/library_logic_optimized.s include/zero_overhead_boundaries.h: src/library_logic.s
+	@mkdir -p include
+	python3 asm2header++.py src/library_logic.s src/library_logic_optimized.s include/zero_overhead_boundaries.h
+
+# Stage 3: Direct Compilation of the rewritten structural assembly straight into the final shared library .so
+libfoobar.so: src/library_logic_optimized.s
+	$(CC) $(LDFLAGS) -o $@ $<
+
+# Stage 4: Compile the client app linking against the updated .so and leveraging the custom register layout
+client_app: src/main.c include/zero_overhead_boundaries.h libfoobar.so
+	$(CC) $(CFLAGS) -I./include -o client_app src/main.c -L. -lfoobar
+
+clean:
+	rm -rf *.so src/*.o src/*.s client_app include/
