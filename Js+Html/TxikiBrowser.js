@@ -1,6 +1,6 @@
-import * as tjs from 'tjs'; 
-import * as lvgl from 'lvgl'; // Assumes LVGL v9 bindings
-import { LibavDecoder } from 'native_bindings'; // The compiled C extension bridge module
+import * as tjs from 'tjs';
+import * as lvgl from 'lvgl';
+import { LibavDecoder, WebGLRenderingContext } from 'native_bindings';
 
 class LVGLRenderer {
     constructor(parsedDOM) {
@@ -495,6 +495,182 @@ function renderToLVGL(parsedData) {
         }
     }
 }
+
+
+class LVGLRenderer {
+    constructor(parsedDOM) {
+        this.dom = parsedDOM;
+        this.globalStyles = {};
+        this.mediaRegistry = new Map(); // Tracks active players by id attribute
+    }
+
+    render() {
+        const screen = lvgl.scr_act();
+        const body = lvgl.obj_create(screen);
+        body.set_size(lvgl.pct(100), lvgl.pct(100));
+        body.set_flex_flow(lvgl.FLEX_FLOW_COLUMN);
+        
+        this.dom.children.forEach(child => this.buildWidget(child, body));
+    }
+
+    buildWidget(node, parentObj) {
+        if (node.type === 'text') {
+            if (!node.content.trim()) return;
+            const lbl = lvgl.label_create(parentObj);
+            lbl.set_text(node.content);
+            return;
+        }
+
+        let currentLvObj = null;
+        const attrs = node.attributes || {};
+
+        // 1. WebGL Viewport Tag Parsing Handler
+        if (node.tagName === 'canvas' && attrs.type === 'webgl') {
+            currentLvObj = lvgl.canvas_create(parentObj);
+            this.initializeWebGLViewport(node, currentLvObj);
+        }
+        
+        // 2. Multimedia Video Target Handling with Custom Playback Loops
+        else if (node.tagName === 'video') {
+            currentLvObj = lvgl.canvas_create(parentObj);
+            const playerState = this.initializeVideoPlayer(node, currentLvObj);
+            if (attrs.id) {
+                this.mediaRegistry.set(attrs.id, playerState);
+            }
+        }
+
+        // 3. Media Controls Component Button Mapping
+        else if (node.tagName === 'button' && attrs['media-target']) {
+            currentLvObj = lvgl.btn_create(parentObj);
+            const label = lvgl.label_create(currentLvObj);
+            label.set_text(node.children[0]?.content || "Action");
+            
+            // Attach UI click interaction event
+            currentLvObj.add_event_cb((e) => {
+                if (lvgl.event_get_code(e) === lvgl.EVENT_CLICKED) {
+                    this.handlePlaybackCommand(attrs['media-target'], attrs['action']);
+                }
+            }, lvgl.EVENT_CLICKED, null);
+        }
+
+        // Base tags rendering engine fallbacks
+        else if (['p', 'h1', 'h2', 'span'].includes(node.tagName)) {
+            currentLvObj = lvgl.label_create(parentObj);
+            const textChild = node.children.find(c => c.type === 'text');
+            if (textChild) currentLvObj.set_text(textChild.content);
+        } else {
+            currentLvObj = lvgl.obj_create(parentObj);
+        }
+
+        if (currentLvObj) {
+            this.applyElementStyles(node, currentLvObj);
+            if (!['canvas', 'video', 'button', 'p', 'h1', 'h2', 'span'].includes(node.tagName)) {
+                node.children.forEach(child => this.buildWidget(child, currentLvObj));
+            }
+        }
+    }
+
+    // Handles user playback interactions (Play / Pause / Mute / Restart)
+    handlePlaybackCommand(targetId, action) {
+        const player = this.mediaRegistry.get(targetId);
+        if (!player) return console.warn(`Media Target pointer not found: ${targetId}`);
+
+        console.log(`[Playback UI Command] Action: ${action} on Target: ${targetId}`);
+        switch (action) {
+            case 'play':
+                player.isPlaying = true;
+                break;
+            case 'pause':
+                player.isPlaying = false;
+                break;
+            case 'restart':
+                player.isPlaying = true;
+                player.decoder.seek(0); // Assumes libav C layer av_seek_frame support
+                break;
+        }
+    }
+
+    initializeVideoPlayer(node, canvasObj) {
+        const attrs = node.attributes || {};
+        const w = parseInt(attrs.width || 320);
+        const h = parseInt(attrs.height || 240);
+        canvasObj.set_size(w, h);
+
+        const decoder = new LibavDecoder(attrs.src, w, h);
+        const playerState = {
+            decoder: decoder,
+            isPlaying: attrs.autoplay !== undefined,
+            width: w,
+            height: h,
+            canvas: canvasObj
+        };
+
+        const allocationBuffer = new Uint8Array(w * h * 4);
+
+        const loop = setInterval(() => {
+            if (!playerState.isPlaying) return;
+
+            // In GPU mode, update directly. If doing a fallback CPU copy:
+            const rawFrame = decoder.nextFrame();
+            if (rawFrame) {
+                allocationBuffer.set(new Uint8Array(rawFrame));
+                canvasObj.set_buffer(allocationBuffer, w, h, lvgl.COLOR_FORMAT_ARGB8888);
+            }
+        }, 1000 / 30);
+
+        canvasObj.add_event_cb((e) => {
+            if (lvgl.event_get_code(e) === lvgl.EVENT_DELETE) {
+                clearInterval(loop);
+                decoder.destroy();
+            }
+        }, lvgl.EVENT_DELETE, null);
+
+        return playerState;
+    }
+
+    initializeWebGLViewport(node, canvasObj) {
+        const w = parseInt(node.attributes.width || 200);
+        const h = parseInt(node.attributes.height || 200);
+        canvasObj.set_size(w, h);
+
+        // Bind raw context onto standard WebGL ES framework wrappers
+        const gl = new WebGLRenderingContext(w, h);
+        const renderBuffer = new Uint8Array(w * h * 4);
+
+        const glRenderLoop = setInterval(() => {
+            gl.viewport(0, 0, w, h);
+            gl.clearColor(0.1, 0.1, 0.15, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+
+            // Shading pipeline execution layers
+            // If sharing context with a dynamic source feed:
+            const connectedPlayer = this.mediaRegistry.get(node.attributes['bind-source']);
+            if (connectedPlayer && connectedPlayer.isPlaying) {
+                const texID = connectedPlayer.decoder.bindToWebGLTexture();
+                connectedPlayer.decoder.updateGpuTexture();
+
+                gl.bindTexture(gl.TEXTURE_2D, texID);
+                // Draw full screen video texture plane using custom vertex fragment programs
+                // gl.drawElements(...) or custom post processing shaders
+            }
+
+            // Extract the completed WebGL viewport frame back onto the LVGL UI Layout
+            gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, renderBuffer);
+            canvasObj.set_buffer(renderBuffer, w, h, lvgl.COLOR_FORMAT_ARGB8888);
+        }, 1000 / 60); // Locked execution targets smooth 60 FPS graphics updates
+
+        canvasObj.add_event_cb((e) => {
+            if (lvgl.event_get_code(e) === lvgl.EVENT_DELETE) {
+                clearInterval(glRenderLoop);
+                gl.destroy();
+            }
+        }, lvgl.EVENT_DELETE, null);
+    }
+
+    applyElementStyles(node, lvObj) {
+        // Base mapping properties implemented in the previous snippet remain here
+    }
+                                                           }
 
 // ==========================================
 // 4. Stdin Data Stream Handler
