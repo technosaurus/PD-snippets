@@ -14,6 +14,26 @@ pack_int32() {
     printf "\\$(printf '%03o' $b0)\\$(printf '%03o' $b1)\\$(printf '%03o' $b2)\\$(printf '%03o' $b3)"
 }
 
+# Parse unsigned integers from a raw binary string using Little-Endian byte ordering
+# Usage: x11_unpack_int "STRING" OFFSET BYTES_COUNT
+# Example: X11_ROOT_ID=$(x11_unpack_int "$screen" 0 4)
+x11_unpack_int() {
+    local str="$1" offset=$2 bytes=$3
+    local val=0 i=0 shift=0 char_val=0
+
+    while [ $i -lt $bytes ]; do
+        # Extract the literal character byte using native substring positioning
+        # Convert it instantly to its numeric decimal representation
+        char_val=$(printf '%d' "'${str:$((offset + i)):1}")
+        
+        # Shift the byte into place and accumulate into the final total
+        val=$(( val | (char_val << shift) ))
+        
+        shift=$(( shift + 8 ))
+        i=$(( i + 1 ))
+    done
+    
+    echo "$val"
 # Helper: Calculate padding for text strings to hit a 4-byte boundary
 # Returns the absolute request length in dwords, and the trailing pad count
 calc_padded_string_len() {
@@ -69,33 +89,25 @@ x11_init() {
     
     # 2. Handshake (Little Endian, Client Major/Minor = 11.0)
     printf '\154\000\013\000\000\000\000\000\000\000\000\000' >&$X11_FD
+
+    # 3. Read the complete 32-byte header block
+    IFS= read -r -n 32 setup_block <&$X11_FD
     
-    # 3. Read & Verify Accept Byte
-    IFS= read -r -n 32 header <&$X11_FD
-    if [ "$(printf '%d' "'${header~1}")" -ne 1 ]; then
-        echo "X11.sh Error: Connection rejected or bad auth." >&2
-        return 1
+    # Verify the success status (Byte offset 0, 1 byte long)
+    if [ "$(x11_unpack_int "$setup_block" 0 1)" -ne 1 ]; then
+        echo "Connection refused or authentication failed." >&2
+        exit 1
     fi
-    #TODO Function to extract N digits to variable
-
-    # Extract Resource ID Base (Bytes 12-15)
-    base_b0=$(printf '%d' "'${header:12:1}")
-    base_b1=$(printf '%d' "'${header:13:1}")
-    base_b2=$(printf '%d' "'${header:14:1}")
-    base_b3=$(printf '%d' "'${header:15:1}")
-    X11_RESOURCE_BASE=$(( base_b0 | (base_b1 << 8) | (base_b2 << 16) | (base_b3 << 24) ))
-
-    # Extract Resource ID Mask (Bytes 16-19)
-    mask_b0=$(printf '%d' "'${header:16:1}")
-    mask_b1=$(printf '%d' "'${header:17:1}")
-    mask_b2=$(printf '%d' "'${header:18:1}")
-    mask_b3=$(printf '%d' "'${header:19:1}")
-    X11_RESOURCE_MASK=$(( mask_b0 | (mask_b1 << 8) | (mask_b2 << 16) | (mask_b3 << 24) ))
-
-    # Reset our internal dynamic generator index to 0
-    X11_CLIENT_ID_COUNTER=0
-    # Flush out the dynamic server resource profile block safely
-    IFS= read -r -n 512 -t 1 setup_block <&$X11_FD
+    
+    # 4. Extract Client Resource configurations cleanly
+    X11_RESOURCE_BASE=$(x11_unpack_int "$setup_block" 12 4)
+    X11_RESOURCE_MASK=$(x11_unpack_int "$setup_block" 16 4)
+    
+    # 5. Calculate remaining payload sizes seamlessly (Byte offset 6, 2 bytes long)
+    remaining_dwords=$(x11_unpack_int "$setup_block" 6 2)
+    remaining_bytes=$(( remaining_dwords * 4 ))
+    # 4. Flush and load the variable payload block
+    IFS= read -r -n $remaining_bytes dynamic_payload <&$X11_FD
 
 }
 
