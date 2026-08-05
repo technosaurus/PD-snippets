@@ -51,6 +51,31 @@ calculate_center() {
     echo $(( (total - object) / 2 ))
 }
 
+# Convert a standard Hex color string to a 32-bit Little-Endian TrueColor integer
+# Usage: MY_COLOR=$(x11_hex_to_pixel "#ff5500")
+x11_hex_to_pixel() {
+    # Strip leading '#' if present
+    local hex="${1##}"
+    
+    # Pad out shorthand hex strings (e.g., "f50" becomes "ff5500")
+    if [ ${#hex} -eq 3 ]; then
+        local r="${hex:0:1}" g="${hex:1:1}" b="${hex:2:1}"
+        hex="${r}${r}${g}${g}${b}${b}"
+    fi
+
+    # Native string slicing to isolate RGB pairs (Hex values)
+    # Prefixing with "0x" allows standard ash shell arithmetic to process them as numbers
+    local r_val=$(( 0x${hex:0:2} ))
+    local g_val=$(( 0x${hex:2:2} ))
+    local b_val=$(( 0x${hex:4:2} ))
+
+    # Map directly to Little-Endian BGR positioning matrix:
+    # Blue is shifted 0 bits, Green is shifted 8 bits, Red is shifted 16 bits
+    local pixel_val=$(( b_val | (g_val << 8) | (r_val << 16) ))
+    
+    echo "$pixel_val"
+}
+
 #  Dynamic Window Centering Function
 # Spawns a window perfectly dead-center on the monitor
 x11_create_centered_window() {
@@ -66,6 +91,20 @@ x11_create_centered_window() {
     
     # Return the raw window ID token back to the script variable
     echo "$wid"
+}
+
+x11_create_gc_custom_color() {
+    local gcid="$1" target_wid="$2" hex_color="$3"
+    
+    # Convert standard web text format to native graphic card token
+    local pixel_token=$(x11_hex_to_pixel "$hex_color")
+
+    # Opcode 55 (CreateGC), Length = 5 dwords (20 bytes)
+    # Value Mask = GCForeground (0x04)
+    printf "\\x37\\x00\\x05\\x00%s%s\\x04\\x00\\x00\\x00\\x0x%02x\\x%02x\\x%02x\\x%02x" \
+        "$gcid" "$target_wid" \
+        $(( pixel_token & 255 )) $(( (pixel_token >> 8) & 255 )) \
+        $(( (pixel_token >> 16) & 255 )) $(( (pixel_token >> 24) & 255 )) >&$X11_FD
 }
 
 #  Dynamic Text Centering Function
@@ -238,6 +277,20 @@ x11_map_window() {
     printf "%s" "$1" >&$X11_FD
 }
 
+# Draw a solid color rectangle inside a window
+# Usage: x11_draw_rectangle "WINDOW_ID" "GC_ID" X Y WIDTH HEIGHT
+x11_draw_rectangle() {
+    local wid="$1" gcid="$2" x=$3 y=$4 w=$5 h=$6
+    
+    # Opcode 70 (0x46), Length = 5 dwords (20 bytes)
+    printf "\\x46\\x00\\x05\\x00%s%s\\x%02x\\x%02x\\x%02x\\x%02x\\x%02x\\x%02x\\x%02x\\x%02x" \
+        "$wid" "$gcid" \
+        $(( x & 255 )) $(( (x >> 8) & 255 )) \
+        $(( y & 255 )) $(( (y >> 8) & 255 )) \
+        $(( w & 255 )) $(( (w >> 8) & 255 )) \
+        $(( h & 255 )) $(( (h >> 8) & 255 )) >&$X11_FD
+}
+
 x11_draw_text() {
     local wid="$1" gcid="$2" x=$3 y=$4 text="$5"
     local t_len=${#text}
@@ -257,23 +310,44 @@ x11_draw_text() {
 }
 
 # Optimized Atom Fetcher using native ${var:offset:len} matching
+
 x11_get_atom() {
     local atom_name="$1"
     local a_len=${#atom_name}
     local pad=$(( (4 - (a_len % 4)) % 4 ))
     local req_dwords=$(( 2 + ((a_len + pad) / 4) ))
-
-    # Send InternAtom header and configuration payload in one single shot
-    printf "\\x10\\x01\\x%02x\\x%02x\\x%02x\\x%02x\\x00\\x00%s" \
+    
+    # Opcode 16 (InternAtom), only_if_exists=1
+    printf "\\x10\\x01\\x%02x\\x%02x\\x%02x\\x%02x\\x00\\x00" \
         $((req_dwords & 255)) $((req_dwords >> 8)) \
-        $((a_len & 255)) $((a_len >> 8)) "$atom_name" >&$X11_FD
+        $((a_len & 255)) $((a_len >> 8)) >&$X11_FD
+        
+    printf "%s" "$atom_name" >&$X11_FD
     [ $pad -gt 0 ] && printf "%0${pad}d" 0 | busybox tr '0' '\000' >&$X11_FD
     
     IFS= read -r -n 32 reply <&$X11_FD
+    echo "$(x11_unpack_int "$reply" 8 4)"
+}
+
+# Translate a raw X11 KeyCode into a standard ASCII character
+# Usage: CHAR=$(x11_keycode_to_ascii 38) -> Returns "a"
+x11_keycode_to_ascii() {
+    local keycode=$1
     
-    # Native Substring extraction instead of 'cut'
-    local atom=$(x11_unpack_int "$reply"  4)
-    echo "$atom"
+    # Linux hardware keycodes are systematically offset by 8 relative to X11 layouts
+    local idx=$(( keycode - 8 ))
+    
+    # Fallback lookup matrix matching standard QWERTY lower-case values (Index 0 to 60)
+    # The leading padding dots account for escape, number rows, and utility keys
+    local layout="...1234567890-=..qwertyuiop[]..asdfghjkl;'`.\zxcvbnm,./..."
+    
+    # Extract the exact 1-character token at our calculated index natively
+    local char="${layout:$idx:1}"
+    
+    # If it's a structural layout padding dot, clean it up to empty string
+    [ "$char" = "." ] && char=""
+    
+    echo "$char"
 }
 
 # Tell the Window Manager to pass us close messages instead of killing us
@@ -335,8 +409,111 @@ done
 exec 3>&-
 }
 
+example2(){
+# 1. Define UI Palette Theme Variables
+THEME_BG="#1a1a24"       # Deep Dark Violet/Gray Canvas
+THEME_TEXT="#00ffcc"     # Electric Teal Font
+THEME_ACCENT="#ff3366"   # Hot Pink Accent Highlights
 
+# Initialize core architecture bounds
+x11_init || exit 1
 
+MY_WINDOW=$(x11_create_id)
+TEXT_GC=$(x11_create_id)
+
+# 2. Build our main layout box using our dynamic background hex token
+local bg_token=$(x11_hex_to_pixel "$THEME_BG")
+x11_create_window "$MY_WINDOW" "$(pack_int32 $X11_ROOT_WINDOW_ID)" 200 200 400 150 $bg_token 1
+x11_map_window "$MY_WINDOW"
+
+# 3. Apply the custom Electric Teal text tool context
+x11_create_gc_custom_color "$TEXT_GC" "$MY_WINDOW" "$THEME_TEXT"
+
+# 4. Render aligned text natively
+x11_draw_centered_text "$MY_WINDOW" "$TEXT_GC" 400 80 "Hex Color Engine Armed."
+
+# Interactive lock loop
+while true; do
+    if IFS= read -r -n 32 event <&3; then
+        [ "$(printf '%02x' "'${event:0:1}")" = "02" ] && break
+    fi
+done
+
+exec 3>&-
+}
+
+example3(){
+#!/bin/sh
+# Ensure our framework mechanics match pure byte boundaries
+export LC_ALL=C
+
+# Include or embed your complete library definitions here
+# . ./X11.sh
+
+# 1. Initialize System and Load Display Details Dynamically
+x11_init || exit 1
+
+MY_WINDOW=$(x11_create_id)
+BG_GC=$(x11_create_id)
+TEXT_GC=$(x11_create_id)
+
+WIN_W=500
+WIN_H=200
+
+# 2. Build Symmetrical Layout bounds
+MY_WINDOW=$(x11_create_centered_window $WIN_W $WIN_H $(x11_hex_to_pixel "#111116") 1)
+x11_map_window "$MY_WINDOW"
+
+# 3. Create Custom Color Rendering Tools
+x11_create_gc_custom_color "$BG_GC" "$MY_WINDOW" "#ff3366"   # Hot Pink for visual accent lines
+x11_create_gc_custom_color "$TEXT_GC" "$MY_WINDOW" "#00ffcc" # Neon Teal for Text rendering
+
+# 4. Generate Initial Frame Layout Elements
+# Draw a sleek structural accent separator line at Y=70 across the screen
+x11_draw_rectangle "$MY_WINDOW" "$BG_GC" 20 70 460 4
+x11_draw_centered_text "$MY_WINDOW" "$TEXT_GC" $WIN_W 45 "--- X11.SH CORE INTERACTIVE TERMINAL ---"
+
+# Store user input string state dynamically in shell memory
+CURRENT_INPUT=""
+
+# 5. The Ultimate Interactive Loop
+echo "Interactive Canvas Armed. Click window and start typing letters..."
+
+while true; do
+    if IFS= read -r -n 32 event <&3; then
+        evt_type_hex=$(printf '%02x' "'${event:0:1}")
+        
+        # Capture KeyPress Events (Opcode 0x02)
+        if [ "$evt_type_hex" = "02" ]; then
+            # Extract raw KeyCode index from byte position 1
+            local raw_code=$(printf '%d' "\"${event:1:1}")
+            
+            # Escape Key (Hardware Code 9) triggers immediate clean exit
+            [ "$raw_code" -eq 9 ] && break
+            
+            # Translate raw signal to readable letter string
+            local ascii_char=$(x11_keycode_to_ascii $raw_code)
+            
+            if [ -n "$ascii_char" ]; then
+                CURRENT_INPUT="${CURRENT_INPUT}${ascii_char}"
+                
+                # Clear the text area using a blank background box before redrawing
+                # To prevent character ghosting layers
+                local blank_gc=$(x11_create_id)
+                x11_create_gc_custom_color "$blank_gc" "$MY_WINDOW" "#111116"
+                x11_draw_rectangle "$MY_WINDOW" "$blank_gc" 0 100 $WIN_W 60
+                
+                # Render updated live string footprint perfectly centered
+                x11_draw_centered_text "$MY_WINDOW" "$TEXT_GC" $WIN_W 130 "> $CURRENT_INPUT"
+            fi
+        fi
+    fi
+done
+
+echo "Exiting cleanly and closing channel loops."
+exec 3>&-
+
+}
 
 
 
