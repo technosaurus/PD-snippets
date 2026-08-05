@@ -2,9 +2,9 @@
 
 X11_NEXT_ID=4194304 # Starts our resource tracker at client base (0x00400000)
 X11_FD=3            # The file descriptor bound to BusyBox nc
+X11_CLIENT_ID_COUNTER=0 # Set our internal dynamic generator index to 0
 
 # Helper: Convert a decimal integer into a 4-byte Little Endian binary string
-# Uses pure ash arithmetic to peel off bytes 0-3
 pack_int32() {
     local val=$1
     local b0=$(( val & 255 ))
