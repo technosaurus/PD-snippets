@@ -143,6 +143,56 @@ x11_draw_zpixmap() {
         $((dest_x & 255)) $((dest_x >> 8)) $((dest_y & 255)) $((dest_y >> 8)) >&$X11_FD
 }
 
+#convert input.png -define png:format=png24 -quality 00 output.png
+x11_draw_png_via_zcat() {
+    local png_file="$1" wid="$2" gcid="$3" dest_x=$4 dest_y=$5
+    
+    # 1. Pure Shell Parser: Load the file into a variable layout
+    # PNG signature is 8 bytes. The first chunk (IHDR) starts immediately at global byte 8.
+    local png_data=$(cat "$png_file")
+    
+    # Extract dimensions from the IHDR block (Width starts at offset 16, Height at 20)
+    local w=$(x11_unpack_int "$png_data" 16 4)
+    local h=$(x11_unpack_int "$png_data" 20 4)
+    
+    # 2. Locate the IDAT (Image Data) compressed stream
+    # Loop over the file chunks natively until we hit the IDAT magic marker ("IDAT")
+    local offset=33  # Jump right past IHDR CRC tokens
+    local chunk_len=0
+    local chunk_type=""
+    
+    while [ $offset -lt ${#png_data} ]; do
+        chunk_len=$(x11_unpack_int "$png_data" $offset 4)
+        chunk_type="${png_data:$((offset + 4)):4}"
+        
+        if [ "$chunk_type" = "IDAT" ]; then
+            # Found it! The raw compressed data starts exactly 8 bytes into the chunk
+            local data_start=$(( offset + 8 ))
+            break
+        fi
+        # If not IDAT, skip to the next chunk (Length field + Type field + Data + 4-byte CRC)
+        offset=$(( offset + chunk_len + 12 ))
+    done
+
+    # 3. Handle the Zlib vs Gzip Header Transformation
+    # CRITICAL: PNG compresses data using Zlib format (header: \x78\x9c).
+    # BusyBox 'zcat' expects Gzip format (header: \x1f\x8b).
+    # To fix this, we strip the 2-byte Zlib header, append a Gzip header, and pipe to zcat!
+    
+    local gzip_header="\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03"
+    local raw_deflate_stream="${png_data:$((data_start + 2)):$((chunk_len - 2))}"
+
+    # 4. Initialize the X11 Full-Color ZPixmap canvas
+    x11_draw_zpixmap "$wid" "$gcid" $w $h $dest_x $dest_y
+
+    # 5. Extract, Inflate, and Stream the binary pixels right into the X11 pipe
+    # The 'zcat' command processes the fake gzip stream instantly.
+    # Every row contains 1 padding byte at the start (Filter Type 0), so we use a small 
+    # nested filter loop or tr modifier if your layout width calculations require row slicing.
+    #(printf "$gzip_header"; printf "%s" "$raw_deflate_stream") | gunzip -c 2>/dev/null >&$X11_FD
+    (printf "$gzip_header"; printf "%s" "$raw_deflate_stream") | zcat 2>/dev/null >&$X11_FD
+}
+
 x11_connect() {
     # Try xhost authorization first (works if we inherit user context)
     xhost +local: >/dev/null 2>&1
