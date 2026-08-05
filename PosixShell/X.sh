@@ -27,27 +27,88 @@ calc_padded_string_len() {
     X11_CALC_PAD=$pad
 }
 
+x11_connect() {
+    # Try xhost authorization first (works if we inherit user context)
+    xhost +local: >/dev/null 2>&1
+
+    echo "[X11.sh] Attempting connection cascade..."
+
+    # STRATEGY 1: Zero External Tools (Pure Shell File Redirection)
+    if exec 3<>/tmp/.X11-unix/X0 2>/dev/null; then
+        echo " -> Mode: PURE SHELL (Native UNIX Socket)"
+        return 0
+    fi
+
+    # STRATEGY 2: BusyBox Netcat via 'local:' syntax
+    if exec 3<><(nc local:/tmp/.X11-unix/X0 2>/dev/null); then
+        echo " -> Mode: BUSYBOX NC (local: syntax)"
+        return 0
+    fi
+
+    # STRATEGY 3: Standard/Alternative Netcat via OpenBSD '-U' flag
+    if exec 3<><(nc -U /tmp/.X11-unix/X0 2>/dev/null); then
+        echo " -> Mode: BUSYBOX NC (-U UNIX Socket)"
+        return 0
+    fi
+
+    # STRATEGY 4: Network Fallback (Assumes TCP port 6000 is open via localhost)
+    # Tries to authorize the network port just in case
+    xhost +localhost >/dev/null 2>&1
+    if exec 3<><(nc 127.0.0.1 6000 2>/dev/null); then
+        echo " -> Mode: NETWORK TCP (Port 6000 Fallback)"
+        return 0
+    fi
+
+    echo "[X11.sh] FATAL: All connection vectors exhausted." >&2
+    return 1
+}
+
 x11_init() {
     # 1. Establish the raw connection socket
-    exec 3<><(busybox nc 127.0.0.1 6000)
+    x11_connect
     
     # 2. Handshake (Little Endian, Client Major/Minor = 11.0)
     printf '\154\000\013\000\000\000\000\000\000\000\000\000' >&$X11_FD
     
     # 3. Read & Verify Accept Byte
-    IFS= read -r -n 8 header <&$X11_FD
+    IFS= read -r -n 32 header <&$X11_FD
     if [ "$(printf '%d' "'${header~1}")" -ne 1 ]; then
         echo "X11.sh Error: Connection rejected or bad auth." >&2
         return 1
     fi
-    
+    #TODO Function to extract N digits to variable
+
+    # Extract Resource ID Base (Bytes 12-15)
+    base_b0=$(printf '%d' "'${header:12:1}")
+    base_b1=$(printf '%d' "'${header:13:1}")
+    base_b2=$(printf '%d' "'${header:14:1}")
+    base_b3=$(printf '%d' "'${header:15:1}")
+    X11_RESOURCE_BASE=$(( base_b0 | (base_b1 << 8) | (base_b2 << 16) | (base_b3 << 24) ))
+
+    # Extract Resource ID Mask (Bytes 16-19)
+    mask_b0=$(printf '%d' "'${header:16:1}")
+    mask_b1=$(printf '%d' "'${header:17:1}")
+    mask_b2=$(printf '%d' "'${header:18:1}")
+    mask_b3=$(printf '%d' "'${header:19:1}")
+    X11_RESOURCE_MASK=$(( mask_b0 | (mask_b1 << 8) | (mask_b2 << 16) | (mask_b3 << 24) ))
+
+    # Reset our internal dynamic generator index to 0
+    X11_CLIENT_ID_COUNTER=0
     # Flush out the dynamic server resource profile block safely
-    IFS= read -r -n 512 -t 1 skipped <&$X11_FD
+    IFS= read -r -n 512 -t 1 setup_block <&$X11_FD
+
 }
 
 x11_create_id() {
-    X11_NEXT_ID=$((X11_NEXT_ID + 1))
-    pack_int32 $X11_NEXT_ID
+    # Increment our local counter
+    X11_CLIENT_ID_COUNTER=$(( X11_CLIENT_ID_COUNTER + 1 ))
+    
+    # Securely mask and bind the counter to the server-allocated base
+    local masked_counter=$(( X11_CLIENT_ID_COUNTER & X11_RESOURCE_MASK ))
+    local final_id=$(( X11_RESOURCE_BASE | masked_counter ))
+    
+    # Return the Little-Endian 4-byte string ready for protocol packets
+    pack_int32 $final_id
 }
 
 x11_create_window() {
@@ -113,3 +174,4 @@ x11_get_atom() {
     local atom_id=$(( b0 | (b1 << 8) | (b2 << 16) | (b3 << 24) ))
     echo "$atom_id"
 }
+
