@@ -193,6 +193,39 @@ x11_draw_png_via_zcat() {
     (printf "$gzip_header"; printf "%s" "$raw_deflate_stream") | zcat 2>/dev/null >&$X11_FD
 }
 
+# x11_connect_auth: Pure Ash shell implementation of an authorized X11 connection handshake
+x11_connect_auth() {
+    # 1. Grab the active hex cookie token for display :0
+    # xauth list output looks like: "hostname/unix:0  MIT-MAGIC-COOKIE-1  abcdef1234..."
+    HEX_COOKIE=$(xauth list :0 2>/dev/null | awk '{print $3}')
+    exec 3<>/dev/tcp/127.0.0.1/6000
+    
+    if [ -z "$HEX_COOKIE" ]; then
+        echo "⚠️  No xauth cookie found! Client handshake falling back to unauthenticated format." >&2
+        # Fallback to standard 12-byte blank auth header
+        printf '\x6c\x00\x0b\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+        return
+    fi
+
+    # 2. Convert the 32-character hex token into 16 raw binary octal print sequences
+    # Example: "ab" becomes "\xab"
+    BIN_COOKIE=""
+    i=0
+    while [ $i -lt 32 ]; do
+        HEX_PAIR=$(substring "$HEX_COOKIE" $i 2)
+        BIN_COOKIE="${BIN_COOKIE}\\x${HEX_PAIR}"
+        i=$((i + 2))
+    done
+
+    # 3. Deliver the block-aligned X11 authorized byte matrix
+    # Byte 0: Little Endian ('l')
+    # Bytes 2-3: Major version (11 -> \x0b\x00)
+    # Bytes 6-7: Auth name len (18 -> \x12\x00)
+    # Bytes 8-9: Auth key len (16 -> \x10\x00)
+    # Followed by string padding alignments and the binary payload
+    printf "\x6c\x00\x0b\x00\x00\x00\x12\x00\x10\x00\x00\x00MIT-MAGIC-COOKIE-1\x00\x00${BIN_COOKIE}"
+}
+
 x11_connect() {
     # Try xhost authorization first (works if we inherit user context)
     xhost +local: >/dev/null 2>&1
