@@ -198,3 +198,39 @@ applet_file_browser() {
 #sudo mount -t overlay overlay -o lowerdir=/usr/share/applications,upperdir=$HOME/.overlays/apps_upper,workdir=$HOME/.overlays/apps_upper \
 #  $HOME/.config/applications
   
+coproc() {
+    local name
+    
+    # Check if the first argument is a runnable command/applet
+    if command -v "$1" >/dev/null 2>&1; then
+        # It's a command! Fallback to default Bash naming behavior
+        name="COPROC"
+    else
+        # It's not a command, treat it as the custom variable name
+        name="$1"
+        shift
+    fi
+
+    if [ -z "$name" ] || [ $# -eq 0 ]; then
+        echo "Usage: coproc [NAME] COMMAND [ARGS...]" >&2
+        return 1
+    fi
+
+    local pipe_in="/tmp/coproc_${$}_${name}_in"
+    local pipe_out="/tmp/coproc_${$}_${name}_out"
+    
+    rm -f "$pipe_in" "$pipe_out"
+    mkfifo "$pipe_in" "$pipe_out"
+
+    "$@" < "$pipe_in" > "$pipe_out" &
+    
+    eval "${name}_PID=$!"
+    eval "${name}_IN=\"\$pipe_in\""
+    eval "${name}_OUT=\"\$pipe_out\""
+}
+
+coproc_close() {
+    local name="${1:-COPROC}"
+    eval "rm -f \"\${${name}_IN}\" \"\${${name}_OUT}\""
+    eval "unset ${name}_PID ${name}_IN ${name}_OUT"
+}
