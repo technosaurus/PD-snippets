@@ -234,3 +234,76 @@ coproc_close() {
     eval "rm -f \"\${${name}_IN}\" \"\${${name}_OUT}\""
     eval "unset ${name}_PID ${name}_IN ${name}_OUT"
 }
+
+# Core Shim Library: Non-blocking Asynchronous Processes
+
+async_spawn() {
+    # Usage: async_spawn NAME COMMAND [ARGS...]
+    local name="$1"
+    shift
+
+    if [ -z "$name" ] || [ $# -eq 0 ]; then
+        echo "Usage: async_spawn NAME COMMAND [ARGS...]" >&2
+        return 1
+    fi
+
+    # Create temporary non-blocking descriptors via files/pipes
+    local pipe_in="/tmp/async_${$}_${name}_in"
+    local pipe_out="/tmp/async_${$}_${name}_out"
+    
+    rm -f "$pipe_in" "$pipe_out"
+    mkfifo "$pipe_in" "$pipe_out"
+
+    # Background executor block compatible across ash/dash/hush/toysh
+    "$@" < "$pipe_in" > "$pipe_out" 2>&1 &
+    
+    eval "${name}_PID=$!"
+    eval "${name}_IN=\"\$pipe_in\""
+    eval "${name}_OUT=\"\$pipe_out\""
+}
+
+async_poll() {
+    # Usage: async_poll NAME
+    # Returns 0 if data is ready to read, 1 if no data is present (non-blocking)
+    local name="${1:-ASYNC}"
+    local pipe_out
+    eval "pipe_out=\${${name}_OUT}"
+
+    # Use standard POSIX test checking if file size is greater than 0 bytes
+    if [ -s "$pipe_out" ]; then
+        return 0
+    fi
+    return 1
+}
+
+async_read() {
+    # Usage: async_read NAME VARNAME
+    # Safely drains buffer only if data has landed
+    local name="$1"
+    local out_var="$2"
+    local pipe_out
+    eval "pipe_out=\${${name}_OUT}"
+
+    if [ -s "$pipe_out" ]; then
+        # Read the raw data buffer and remove it from the pipe queue safely
+        local content
+        read -r content < "$pipe_out" || [ -n "$content" ]
+        eval "$out_var=\"\$content\""
+        return 0
+    fi
+    return 1
+}
+
+async_close() {
+    local name="${1:-ASYNC}"
+    local pid
+    eval "pid=\${${name}_PID}"
+
+    # Standard POSIX-safe process teardown
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        kill -15 "$pid" 2>/dev/null
+    fi
+
+    eval "rm -f \"\${${name}_IN}\" \"\${${name}_OUT}\""
+    eval "unset ${name}_PID ${name}_IN ${name}_OUT"
+}
