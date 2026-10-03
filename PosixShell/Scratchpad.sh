@@ -307,3 +307,91 @@ async_close() {
     eval "rm -f \"\${${name}_IN}\" \"\${${name}_OUT}\""
     eval "unset ${name}_PID ${name}_IN ${name}_OUT"
 }
+
+serialize_variables_to_json() {
+    # Check if we are running in Bash
+    if [ -n "$BASH_VERSION" ]; then
+        # =====================================================================
+        # BASH MODE (Supports Arrays & Advanced Builtins)
+        # =====================================================================
+        local var attrs val element first_item=true
+        
+        printf '{'
+        
+        # compgen -v is a Bash builtin that lists all variable names
+        for var in $(compgen -v); do
+            # Filter out standard system noise to keep the JSON manageable
+            case "$var" in
+                BASH*|COMP*|DIRSTACK|GROUPS|FUNCNAME|HIST*|IFS|PIPESTATUS|POSIX*|SHELL*|UID) continue ;;
+            esac
+
+            # Use declare -p metadata to identify the type
+            attrs=$(declare -p "$var" 2>/dev/null)
+            
+            # Print a comma if this isn't our first item
+            if [ "$first_item" = true ]; then first_item=false; else printf ','; fi
+            
+            if [[ "$attrs" == *"declare -a"* || "$attrs" == *"declare -A"* ]]; then
+                # Handle Array: Use a modern Bash nameref to loop through keys/values
+                local -n array_ref="$var"
+                local dynamic_comma=""
+                
+                printf '"%s":{"type":"array","value":[' "$var"
+                for element in "${array_ref[@]}"; do
+                    # Escape inner quotes/backslashes inside the array element using pure Bash builtins
+                    val="${element//\\/\\\\}"
+                    val="${val//\"/\\\"}"
+                    val="${val//$'\n'/\\n}" # Handles line breaks if any
+                    
+                    printf '%s"%s"' "$dynamic_comma" "$val"
+                    dynamic_comma=","
+                done
+                printf ']}'
+            else
+                # Handle Scalar string
+                val="${!var}"
+                val="${val//\\/\\\\}"
+                val="${val//\"/\\\"}"
+                val="${val//$'\n'/\\n}"
+                
+                printf '"%s":{"type":"scalar","value":"%s"}' "$var" "$val"
+            fi
+        done
+        printf '}\n'
+
+    else
+        # =====================================================================
+        # POSIX SH MODE (Scalars Only, Pure Builtins)
+        # =====================================================================
+        # We must rely on 'set' because compgen doesn't exist.
+        # To avoid external sed, we stream the output of 'set' line-by-line 
+        # and parse it using standard shell parameter expansion.
+        
+        printf '{'
+        first_item=true
+        
+        set | while IFS= read -r line; do
+            # Extract just the variable name (everything before the first '=')
+            var="${line%%=*}"
+            
+            # Skip invalid lines (like functions printed by some POSIX environments)
+            # or massive built-in paths
+            case "$var" in
+                ""|*" "*|IFS|PATH|PWD|HOME|PPID|SHELL|OPTIND|PS1|PS2|PS4) continue ;;
+            esac
+            
+            # Fetch value using POSIX-compliant dynamic evaluation
+            eval "val=\"\$$var\""
+            
+            # Escape strings purely using POSIX string replacement loops if needed,
+            # but standard parameter expansions work for the basics:
+            # (Note: POSIX sh doesn't support the ${var//search/replace} syntax, 
+            # so we keep it simple or do a character-by-character check if required.
+            # Assuming basic string content for this minimal engine)
+            
+            if [ "$first_item" = true ]; then first_item=false; else printf ','; fi
+            printf '"%s":{"type":"scalar","value":"%s"}' "$var" "$val"
+        done
+        printf '}\n'
+    fi
+}
