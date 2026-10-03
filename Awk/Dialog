@@ -1,0 +1,139 @@
+#!/bin/sh
+# A pure BusyBox AWK substitute for 'dialog' text layouts
+
+OLD_TTY=$(stty -g)
+stty raw -echo
+trap 'system("stty '"$OLD_TTY"'"); clear; exit' INT TERM EXIT
+
+# Usage Example: Pipe data into the widget engine to format a prompt window
+cat << 'EOF' | awk '
+function get_terminal_size() {
+    cols = 80; lines = 24
+    "tput cols" | getline cols; close("tput cols")
+    "tput lines" | getline lines; close("tput lines")
+}
+
+function wrap_text(text, max_w,    words, num_words, line, i) {
+    gsub(/[ \t\r\n]+/, " ", text)
+    num_words = split(text, words, " ")
+    line = ""
+    for (i = 1; i <= num_words; i++) {
+        if (length(line) + length(words[i]) + 1 > max_w) {
+            b_count++
+            buffer[b_count] = line
+            line = words[i]
+        } else {
+            line = line (line == "" ? "" : " ") words[i]
+        }
+    }
+    if (line != "") { b_count++; buffer[b_count] = line }
+}
+
+function draw_window(title, type,    win_w, win_h, start_row, start_col, r, c, i, pad) {
+    get_terminal_size()
+    
+    # Calculate adaptive window boundaries based on data volume
+    win_w = 50
+    win_h = b_count + 6
+    
+    start_row = int((lines - win_h) / 2)
+    start_col = int((cols - win_w) / 2)
+    
+    # 1. Clear Screen Canvas and Drop Shadow Block
+    printf "\033[2J\033[H" > "/dev/stderr"
+    
+    # 2. Draw Top Box Margin Border
+    printf "\033[%d;%dH┌", start_row, start_col > "/dev/stderr"
+    for (c = 2; c < win_w; c++) printf "─" > "/dev/stderr"
+    printf "┐" > "/dev/stderr"
+    
+    # Inject Title text centered into header frame
+    pad = int((win_w - length(title)) / 2)
+    printf "\033[%d;%dH\033[1;36m%s\033[0m", start_row, start_col + pad, title > "/dev/stderr"
+    
+    # 3. Paint Window Contents Buffer
+    for (i = 1; i <= b_count; i++) {
+        printf "\033[%d;%dH│ %-46s │", start_row + i, start_col, buffer[i] > "/dev/stderr"
+    }
+    
+    # 4. Inject Type-Specific Interactive Fields
+    if (type == "input") {
+        printf "\033[%d;%dH│ [ %-44s ] │", start_row + b_count + 2, start_col, user_entry > "/dev/stderr"
+        printf "\033[%d;%dH│   (Press [Enter] to submit | [Esc] to cancel)  │", start_row + b_count + 4, start_col > "/dev/stderr"
+    } else {
+        printf "\033[%d;%dH│             \033[7m  OK  \033[0m                        │", start_row + b_count + 2, start_col > "/dev/stderr"
+        printf "\033[%d;%dH│         (Press [Enter] or [Esc] to exit)        │", start_row + b_count + 4, start_col > "/dev/stderr"
+    }
+    
+    # 5. Draw Bottom Border Frame
+    printf "\033[%d;%dH└", start_row + win_h - 1, start_col > "/dev/stderr"
+    for (c = 2; c < win_w; c++) printf "─" > "/dev/stderr"
+    printf "┘\n\r" > "/dev/stderr"
+    
+    # Position cursor directly inside input box line if active
+    if (type == "input") {
+        printf "\033[%d;%dH", start_row + b_count + 2, start_col + 4 + length(user_entry) > "/dev/stderr"
+    }
+}
+
+{
+    # Accumulate multiline strings from standard input pipeline
+    raw_input = raw_input $0 " "
+}
+
+END {
+    # Set default UI configuration variables
+    title = "SYSTEM MESSAGE"
+    mode = "msgbox"
+    user_entry = ""
+    b_count = 0
+    
+    # Parse incoming configuration directives if appended to data stream
+    if (raw_input ~ /__TITLE__:/) {
+        match(raw_input, /__TITLE__:[^_]+/)
+        title = substr(raw_input, RSTART + 10, RLENGTH - 10)
+    }
+    if (raw_input ~ /__MODE__:/) {
+        match(raw_input, /__MODE__:[^_]+/)
+        mode = substr(raw_input, RSTART + 9, RLENGTH - 9)
+        gsub(/[ \t]/, "", mode)
+    }
+    
+    # Strip metadata markers out to isolate text description payload
+    gsub(/__TITLE__:[^\s]+/, "", raw_input)
+    gsub(/__MODE__:[^\s]+/, "", raw_input)
+    
+    # Compile text wrapping boundaries
+    wrap_text(raw_input, 46)
+    
+    # Primary Interactive Event State Monitor Loop
+    while (1) {
+        draw_window(title, mode)
+        
+        if ((getline key < "/dev/tty") <= 0) exit
+        
+        # Intercept Standalone Escape sequences (Exit with cancellation signal code 1)
+        if (key == "\033") {
+            if ((getline extra < "/dev/tty") > 0) continue # Skip arrow buffer fills
+            print "" # Return empty string upstream
+            exit 1
+        }
+        
+        # Handle form entry submissions
+        if (key == "\r" || key == "") {
+            print user_entry # Push captured input field string value downstream to stdout
+            exit 0
+        }
+        
+        # Capture input text mutations inside inputboxes
+        if (mode == "input") {
+            if (key == "\010" || key == "\177") { # Backspace processing
+                user_entry = substr(user_entry, 1, length(user_entry) - 1)
+            } else if (length(key) == 1 && length(user_entry) < 42) {
+                user_entry = user_entry key
+            }
+        }
+    }
+}
+'
+EOF
