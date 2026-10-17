@@ -5,6 +5,7 @@ However, precision variance—scaling from FP8 up to FP64—highlights the next 
 To prevent your codebase from fracturing into separate f32, f64, and f16 implementations, you can combine your vector extensions with C++20 template metaprogramming.
 By parameterizing the Scalar Type, Vector Width, and Polynomial Degree, the exact same Horner parity loop can scale seamlessly across any data precision.
 
+```C++
 #include <concepts>#include <cstdint>
 // Gen-Vector Helper: Statically calculates the required byte size for target lane widthstemplate<typename T, int Lanes>using native_vector_t __attribute__((vector_size(sizeof(T) * Lanes))) = T;
 // Parameterized Parity Resulttemplate<typename T, int Lanes>struct ParityResult {
@@ -16,7 +17,7 @@ By parameterizing the Scalar Type, Vector Width, and Polynomial Degree, the exac
     native_vector_t<T, Lanes> even_coefs[(Degree / 2) + 1];
     native_vector_t<T, Lanes> odd_coefs[(Degree / 2) + 1];
 };
-
+```
 ------------------------------
 ## 2. Structural Requirements by Precision Tier
 When a user switches between types, the engine naturally adapts its internal parameters to optimize for that specific precision layer:
@@ -44,6 +45,7 @@ When a user switches between types, the engine naturally adapts its internal par
 ## 3. The Full Metaprogrammed Architecture
 Here is how the unified, type-agnostic engine handles the entire pipeline cleanly. When the compiler instantiates this template, it bakes out the exact register sizes and unrolls the precise number of FMA loops matching the target type.
 
+```C++
 template<typename T, typename IntT, int Lanes, int Degree>class HeterogeneousVectorEngine {public:
     using VecT = native_vector_t<T, Lanes>;
     using MaskT = native_vector_t<IntT, Lanes>;
@@ -85,14 +87,16 @@ template<typename T, typename IntT, int Lanes, int Degree>class HeterogeneousVec
         return ParityResult<T, Lanes>{ v_even, v_odd };
     }
 };
+```
 
 ## How to Deploy the Engine Matrix
 With this template finalized, providing complete cross-type execution capabilities within your framework becomes a matter of declaring clean type instantiations:
 
+```C++
 // Instantiate a blazing-fast FP8 engine running 64 lanes simultaneously (3rd-degree polynomials)HeterogeneousVectorEngine<int8_t, int8_t, 64, 3> fp8_engine;
 // Instantiate your standard high-precision 16-lane FP32 production engine HeterogeneousVectorEngine<float, int32_t, 16, 5> fp32_engine;
 // Instantiate an ultra-precise, deep-precision scientific FP64 engineHeterogeneousVectorEngine<double, int64_t, 8, 13> fp64_engine;
-
+```
 
 
 To see where this architecture shines, we have to look at a massive bottleneck in modern AI: Non-Uniform Quantization Mapping in High-Dimensional Embedding Spaces.
@@ -130,6 +134,7 @@ By compressing the mathematical domain down to the exact region where your weigh
 ## Host-Side C++ Code: The K-Space to Remez Generator
 Here is how the host-side JIT architecture operates. It analyzes the incoming weight frequency distribution and outputs the compact coefficient registers straight to your execution buffers.
 
+```C++
 #include <vector>#include <cmath>#include <complex>
 struct PackedCoefficients {
     float even_c4, even_c2, even_c0, pad0;
@@ -161,7 +166,7 @@ struct PackedCoefficients {
 
     return coefficients;
 }
-
+```
 ------------------------------
 ## Performance Summary on the Hardware Layer
 When this setup is executed through your parallel vector shuffler or compiled down into a SPIR-V compute stream:
